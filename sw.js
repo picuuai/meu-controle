@@ -1,5 +1,5 @@
-const cacheName = 'meu-controle-v6';
-const files = ['./','./index.html','./style.css?v=6','./app.mjs?v=6','./ledger.mjs','./sync.mjs','./dashboard.mjs','./manifest.webmanifest','./icon-192.png','./icon-512.png','./pdf.mjs','./pdf.worker.mjs',
+const cacheName = 'meu-controle-v7';
+const files = ['./','./index.html','./style.css?v=7','./app.mjs?v=7','./ledger.mjs','./sync.mjs','./dashboard.mjs','./manifest.webmanifest','./icon-192.png','./icon-512.png','./pdf.mjs','./pdf.worker.mjs',
   './ocr.mjs','./ocr/tesseract.mjs','./ocr/worker.min.js','./ocr/tesseract-core-lstm.wasm.js','./ocr/por.traineddata.gz'];
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(cacheName);

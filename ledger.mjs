@@ -4,7 +4,7 @@ export function parseNotice(text) {
   const count = Number(installments?.[1]) || null;
   const merchant = /\b(?:estabelecimento\s*[:\-]?|em|na loja)\s+(?!\d|R\s*\$)([^.\n;]+?)(?=\s+(?:em|de|no dia|no cart[aã]o)\s+(?:\d|R\s*\$)|[.;\n]|$)/i;
   const name = text.match(merchant)?.[1]?.trim();
-  const bank = /\bita[uú]\b/i.test(text) ? 'Itaú' : /\bcaixa\b/i.test(text) ? 'CAIXA' : undefined;
+  const bank = /\bita[uú](?!\p{L})/iu.test(text) ? 'Itaú' : /\bcaixa\b/i.test(text) ? 'CAIXA' : undefined;
   const date = text.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
   const dateValue = date && date[3] + '-' + date[2] + '-' + date[1];
   return {name: name || 'Compra do cartão', cents: price ? toCents(price[1]) : null,

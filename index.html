@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=13"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=15"><title>Meu Controle</title></head><body>
 <header><div class="brand"><span>▤</span> Meu Controle</div><label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label></header>
 <main>
 <section class="hero"><div><h1>Painel financeiro</h1><p>Faturas e parcelas dos seus cartões</p></div><div class="hero-actions"><button id="install-app" type="button" hidden>Instalar app</button><button id="add">+ Nova compra</button></div></section>
@@ -9,7 +9,7 @@
 <section class="panel"><h2>Gastos por cartão</h2><ul class="chart" id="card-chart"></ul></section>
 <section class="panel"><h2>Evolução das faturas</h2><ul class="chart" id="monthly-chart"></ul></section>
 </div>
-<div class="workspace"><section class="panel"><h2>Lançamentos</h2><label class="entry-search">Buscar descrição <input type="search" id="search" placeholder="Ex.: supermercado"></label><p id="entry-status" role="status"></p><button id="undo-delete" type="button" hidden>Desfazer exclusão</button><div id="entries"></div></section><section class="panel"><h2>Adicionar lançamentos</h2>
+<div class="workspace"><section class="panel"><h2>Lançamentos</h2><label class="entry-search">Buscar descrição <input type="search" id="search" placeholder="Ex.: supermercado"></label><p id="entry-status" role="status"></p><button id="undo-delete" type="button" hidden>Desfazer exclusão</button><section id="pending-section" hidden><h3>Parcelamentos pendentes</h3><div id="pending-entries"></div></section><div id="entries"></div></section><section class="panel"><h2>Adicionar lançamentos</h2>
 <label>Cartão de origem <select id="bank"><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label>
 <div class="pdf-drop" id="pdf-drop">
 <p>Arraste o PDF da fatura para cá</p>
@@ -43,4 +43,4 @@
 <li><strong>Computador.</strong> No Chrome ou no Edge, procure a opção de instalar na barra de endereço ou no menu do navegador.</li>
 </ul>
 <form method="dialog" class="actions"><button type="submit">Fechar</button></form></dialog>
-<script type="module" src="./app.mjs?v=13"></script></body></html>
+<script type="module" src="./app.mjs?v=15"></script></body></html>

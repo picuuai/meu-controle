@@ -69,19 +69,22 @@ export function parseStatement(lines, month, bank) {
     const [,day, dateMonth, year, description, value, direction] = row;
     if (/pagto\b|pagamento (?:de|da|efetuado|via conta)|obrigado pelo pagamento|saldo anterior|total da fatura/i.test(description)) return [];
     const marker = description.match(installmentMarker);
-    const part = Number(marker?.[1]) || 1;
-    const count = Number(marker?.[2]) || null;
-    if (count && (part > count || count > 120)) return [];
-    if (nextBill && !count) return [];
+    const partial = marker || description.match(incompleteInstallment);
+    const part = Number(partial?.[1]) || 1;
+    const total = Number(marker?.[2]) || null;
+    const count = total && part <= total && total <= 120 ? total : null;
+    const installmentPending = Boolean(partial && !count);
+    if (nextBill && !count && !installmentPending) return [];
     const inferredYear = Number(month.slice(0,4)) - Number(dateMonth > month.slice(5));
     const date = (year?.length === 2 ? '20' + year : year || inferredYear) + '-' + dateMonth + '-' + day;
     const parsed = new Date(date + 'T00:00Z');
     if (Number.isNaN(+parsed) || parsed.toISOString().slice(0,10) !== date) return [];
-    const name = (marker ? description.slice(0, marker.index) : description).trim();
+    const name = (partial ? description.slice(0, partial.index) : description).trim();
     const amount = toCents(value.replaceAll(/\s/g, '').replace('−', '-'));
     const cents = direction?.toUpperCase() === 'C' ? -Math.abs(amount) : amount;
     const billingMonth = nextBill ? monthAfter(month) : month;
-    return name ? [{name, date, bank, month:billingMonth, cents, count: count || 1, part, source:'pdf', statementValue:true,
+    return name ? [{name, date, bank, month:billingMonth, cents, count: installmentPending ? null : count || 1,
+      part, source:'pdf', statementValue:true, ...(installmentPending && {installmentPending:true}),
       ...(nextBill && {projection:true})}] : [];
   });
 }
@@ -94,11 +97,13 @@ export function charge(entry, part) {
 }
 
 const monthNumber = month => Number(month.slice(0,4)) * 12 + Number(month.slice(5)) - 1;
-const installmentMarker = /(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})(?:\s*\/\s*|\s+de\s+)(\d{1,3})\s*$/i;
+const installmentMarker = /(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})(?:\s*\/\s*|\s+d\s*e\s+)(\d{1,3})\s*$/i;
+const incompleteInstallment = /\b(\d{1,3})(?:\s*\/|\s+d(?:\s*e)?)\s*$/i;
 
 export function installmentCount(entry) {
   if (entry.count) return entry.count;
-  return entry.source === 'pdf' && !/(?:\b\d{1,3}\s+de\s*(?:\d{1,3})?|\b\d{1,3}\s*\/\s*\d{1,3})$/i.test(entry.name) ? 1 : null;
+  return entry.source === 'pdf' && !entry.installmentPending &&
+    !installmentMarker.test(entry.name) && !incompleteInstallment.test(entry.name) ? 1 : null;
 }
 
 function monthAfter(month) {
@@ -107,6 +112,7 @@ function monthAfter(month) {
 }
 
 export function forMonth(entry, month) {
+  if (!entry.count) return entry.month === month ? {part:entry.part, cents:entry.cents} : null;
   const part = entry.part + monthNumber(month) - monthNumber(entry.month);
   if (part < (entry.statementValue ? entry.part : 1) || part > (entry.count || 1)) return null;
   return {part, cents:charge(entry,part)};
@@ -120,7 +126,7 @@ export function futureTotal(entry, month) {
   return cents;
 }
 
-const normalized = value => value.replace(installmentMarker, '').normalize('NFD')
+const normalized = value => value.replace(installmentMarker, '').replace(incompleteInstallment, '').normalize('NFD')
   .replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 
 export function candidates(entries, incoming) {

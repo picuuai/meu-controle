@@ -1,5 +1,5 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
-  identifyStatementRows, importStatementRows, installmentCount} from './ledger.mjs?v=13';
+  identifyStatementRows, importStatementRows, installmentCount} from './ledger.mjs?v=15';
 import {mergeEntries, syncEntries} from './sync.mjs?v=13';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
@@ -24,7 +24,7 @@ for (const category of [...categories, uncategorized]) $('category-filter').add(
 
 function paymentLabel(entry, part = entry.part) {
   const count = installmentCount(entry);
-  if (!count) return 'Parcelamento pendente';
+  if (!count) return part > 1 ? 'Parcela ' + part + ' · total pendente' : 'Parcelamento pendente';
   return count === 1 ? 'À vista' : part + '/' + count;
 }
 
@@ -75,6 +75,8 @@ function render() {
   const query = $('search').value.trim().toLocaleLowerCase('pt-BR');
   const results = visible.filter(({entry}) => entry.name.toLocaleLowerCase('pt-BR').includes(query));
   $('entries').replaceChildren();
+  $('pending-entries').replaceChildren();
+  $('pending-section').hidden = !results.some(({entry}) => !installmentCount(entry));
   if (!results.length) $('entries').textContent = 'Nenhum lançamento encontrado.';
   for (const {entry,bill} of results) {
     const button = document.createElement('button');
@@ -88,7 +90,7 @@ function render() {
     value.textContent = brl(bill.cents);
     button.append(detail,value);
     button.onclick = () => edit(entry);
-    $('entries').append(button);
+    $(installmentCount(entry) ? 'entries' : 'pending-entries').append(button);
   }
 }
 
@@ -103,7 +105,8 @@ function review(refreshPdf = true) {
   }
   if (!refreshPdf) return;
   $('pdf-rows').replaceChildren();
-  const pdfRows = queue.filter(item => item.source === 'pdf').sort((a, b) => a.month.localeCompare(b.month));
+  const pdfRows = queue.filter(item => item.source === 'pdf').sort((a, b) =>
+    a.month.localeCompare(b.month) || Number(!installmentCount(a)) - Number(!installmentCount(b)));
   $('pdf-review').hidden = !pdfRows.length;
   const selectionChanged = () => {
     const total = pdfRows.filter(item => selectedPdf.has(item)).length;
@@ -120,12 +123,21 @@ function review(refreshPdf = true) {
     review();
   };
   let billingMonth;
+  let showingPending = false;
   for (const item of pdfRows) {
     if (billingMonth !== item.month) {
       billingMonth = item.month;
+      showingPending = false;
       const heading = document.createElement('h3');
       heading.className = 'pdf-billing-month';
       heading.textContent = (item.projection ? 'Próxima fatura' : 'Fatura do mês') + ' · ' + billingMonth.split('-').reverse().join('/');
+      $('pdf-rows').append(heading);
+    }
+    if (!showingPending && !installmentCount(item)) {
+      showingPending = true;
+      const heading = document.createElement('h4');
+      heading.className = 'pdf-billing-month';
+      heading.textContent = 'Parcelamento a confirmar';
       $('pdf-rows').append(heading);
     }
     const button = document.createElement('button');
@@ -181,7 +193,7 @@ function edit(entry) {
   fields.date.value = entry.date || localDate;
   fields.month.value = entry.month || $('month').value;
   fields.amount.value = entry.cents == null ? '' : (entry.cents/100).toFixed(2);
-  fields.count.value = installmentCount(entry) ?? (entry.source === 'alert' || entry.id ? '' : 1);
+  fields.count.value = installmentCount(entry) ?? (entry.source || entry.id ? '' : 1);
   fields.part.value = entry.part || 1;
   initialCategory = entry.id ? entry.category || '' : suggestCategory(entry.name || '');
   fields.category.value = initialCategory;
@@ -192,8 +204,10 @@ function edit(entry) {
 }
 
 function draft() {
+  const count = Number(fields.count.value) || null;
   return {...editing,name:fields.name.value.trim(),bank:fields.bank.value,category:fields.category.value,date:fields.date.value,month:fields.month.value,
-    cents:Math.round(Number(fields.amount.value)*100),count:Number(fields.count.value)||null,part:Number(fields.part.value)};
+    cents:Math.round(Number(fields.amount.value)*100),count,part:Number(fields.part.value),
+    ...(editing.source === 'pdf' && !count && {installmentPending:true})};
 }
 function updateMatch() {
   $('match').replaceChildren();
@@ -218,7 +232,7 @@ form.oninput = event => {
 form.onsubmit = event => {
   event.preventDefault();
   const entry = draft();
-  if (entry.part > (entry.count || 1)) {
+  if (entry.count && entry.part > entry.count) {
     fields.part.setCustomValidity('A parcela deve estar entre 1 e o total informado.');
     fields.part.reportValidity();
     return;
@@ -424,7 +438,9 @@ async function importPdf(files) {
     const {alreadyRecorded} = importStatementRows(readEntries(), imported, () => Symbol(), 0);
     const remaining = imported.filter(row => !alreadyRecorded.has(row));
     selectedPdf.clear();
-    for (const row of remaining) selectedPdf.add(row);
+    for (const row of remaining) {
+      if (installmentCount(row)) selectedPdf.add(row);
+    }
     queue = [...queue.filter(entry => entry.source !== 'pdf'),...remaining];
     review();
     if (!imported.length) {

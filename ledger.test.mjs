@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './dist/ledger.mjs';
-import {identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate} from './dist/ledger.mjs';
+import {identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast,
+  statementDueDate, statementReferenceMonth} from './dist/ledger.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -115,6 +116,28 @@ test('reconhece vencimento em linha separada e confirma a parcela prevista sem d
   assert.equal(result.updated,1);
   assert.equal(result.entries.length,1);
   assert.equal(result.entries[0].projection,false);
+});
+
+test('Itaú usa o mês de emissão mesmo com vencimento no mês seguinte', () => {
+  const item = (str, x, y) => ({str, transform:[1,0,0,1,x,y]});
+  const items = [item('Vencimento: 01/12/2026',233,668), item('Emiss',244,661),
+    item('o: 23/11/2026',261,661), item('Próx. Fechamento: 25/12/2026',226,653)];
+  const due = statementDueDate(items);
+  assert.equal(due,'2026-12-01');
+  assert.equal(statementReferenceMonth(items,'Itaú','2026-12',due),'2026-11');
+  assert.equal(statementReferenceMonth([], 'Itaú', '2026-11', due), '2026-11');
+});
+
+test('cabeçalho de próximas faturas pode começar em uma página e continuar na seguinte', () => {
+  const item = (str, x, y, width = 20) => ({str, width, transform:[1,0,0,1,x,y]});
+  const section = {};
+  statementTextRows([item('Compras parceladas - próximas faturas',351,390)],595,'Itaú',section);
+  const lines = statementTextRows([
+    item('05/11',143,700), item('Loja 02/03',170,700), item('30,00',309,700),
+    item('Próxima fatura',143,690), item('30,00',309,690)
+  ],595,'Itaú',section);
+  assert.equal(parseStatement(lines,'2026-11','Itaú')[0].month,'2026-12');
+  assert.equal(section.nextBill,false);
 });
 
 test('CAIXA mantém a parcela do demonstrativo no mês da fatura', () => {

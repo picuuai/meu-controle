@@ -1,5 +1,6 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
-  identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate} from './ledger.mjs?v=17';
+  identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate,
+  statementReferenceMonth} from './ledger.mjs?v=19';
 import {mergeEntries, syncEntries} from './sync.mjs?v=13';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
@@ -433,6 +434,7 @@ async function importPdf(files) {
     const pdf = await documentTask.promise;
     const parsed = [];
     const controls = {};
+    const section = {};
     let dueDate;
     const imagePages = [];
     const textPages = [];
@@ -441,7 +443,7 @@ async function importPdf(files) {
       const {items} = await page.getTextContent();
       if (pageNo === 1) {
         dueDate = statementDueDate(items);
-        if (dueDate) month = dueDate.slice(0, 7);
+        month = statementReferenceMonth(items, bank, month, dueDate);
       }
       if (!items.some(item => item.str?.trim())) {
         imagePages.push(page);
@@ -449,7 +451,7 @@ async function importPdf(files) {
       }
       textPages.push(page);
       const width = page.getViewport({scale: 1}).width;
-      const lines = statementTextRows(items, width, bank);
+      const lines = statementTextRows(items, width, bank, section);
       parsed.push(...parseStatement(lines, month, bank, controls));
     }
     // Some scans have a text layer whose words do not align with the printed rows.
@@ -479,8 +481,9 @@ async function importPdf(files) {
       status.textContent = 'Todos os ' + imported.length + ' lançamentos reconhecidos nesta fatura já estão registrados.';
     } else {
       const skipped = alreadyRecorded.size ? ' ' + alreadyRecorded.size + ' já registrados foram ocultados.' : '';
-      const due = dueDate ? ' Vencimento ' + dueDate.split('-').reverse().join('/') + '.' : '';
-      status.textContent = remaining.length + ' para lançar ou revisar em ' + file.name + '.' + due + skipped +
+      const due = dueDate ? ' · Vencimento ' + dueDate.split('-').reverse().join('/') : '';
+      const reference = ' Fatura de ' + month.split('-').reverse().join('/') + due + '.';
+      status.textContent = remaining.length + ' para lançar ou revisar em ' + file.name + '.' + reference + skipped +
         (ocr ? ' Confira os dados reconhecidos.' : '') + ' Depois, toque em Lançar selecionados.';
     }
   } catch (error) {

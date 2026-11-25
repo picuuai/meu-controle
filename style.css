@@ -30,3 +30,14 @@ main {padding-bottom: 28px}
 .pdf-drop p {margin: 0 0 8px}
 .pdf-drop.dragging {border-color: #278567; background: var(--bg)}
 #native-status {color: var(--muted); font-size: .9rem}
+
+.pdf-review {margin: 12px 0 20px}
+.pdf-review-actions, .pdf-row, .panel .review-check {display: flex; align-items: center; gap: 8px}
+.pdf-review-actions {flex-wrap: wrap; justify-content: space-between; margin-bottom: 8px}
+.panel .review-check {margin: 0}
+.pdf-review input[type=checkbox] {width: 18px; height: 18px; min-height: 0; margin: 0; flex: 0 0 18px}
+#pdf-rows {max-height: 340px; overflow: auto}
+.pdf-row {padding: 3px 4px}
+.pdf-row .entry {margin: 0; overflow-wrap: anywhere}
+#save-pdf {background: var(--accent); color: #122b24}
+#save-pdf:disabled {opacity: .55; cursor: default}

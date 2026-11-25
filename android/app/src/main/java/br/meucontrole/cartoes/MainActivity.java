@@ -1,9 +1,12 @@
 package br.meucontrole.cartoes;
 
 import android.app.Activity;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
 import android.app.NotificationManager;
 import android.content.ComponentName;
 import android.provider.Settings;
@@ -16,10 +19,12 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.Toast;
 import android.text.InputType;
 import android.app.AlertDialog;
 import androidx.webkit.WebViewAssetLoader;
 import java.io.ByteArrayInputStream;
+import java.util.concurrent.atomic.AtomicReference;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -27,9 +32,11 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final int PICK_FILE = 1;
     private ValueCallback<Uri[]> picker;
+    private final AtomicReference<String> sharedMessage = new AtomicReference<>();
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        receiveSharedMessage(getIntent());
         WebView web = new WebView(this);
         WebViewAssetLoader assets = new WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -92,6 +99,59 @@ public class MainActivity extends Activity {
         });
         setContentView(web);
         web.loadUrl("https://appassets.androidplatform.net/assets/index.html");
+        if (sharedMessage.get() == null) offerNotificationAccess();
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        receiveSharedMessage(intent);
+    }
+
+    private void receiveSharedMessage(Intent intent) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction()) || !"text/plain".equals(intent.getType())) return;
+        CharSequence text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT);
+        if (text != null && text.length() > 0 && text.length() <= 8192) {
+            sharedMessage.set(text.toString());
+            intent.removeExtra(Intent.EXTRA_TEXT);
+        }
+    }
+
+    private ComponentName notificationListener() {
+        return new ComponentName(this, CardAlerts.class);
+    }
+
+    private boolean notificationAccessGranted() {
+        return getSystemService(NotificationManager.class).isNotificationListenerAccessGranted(notificationListener());
+    }
+
+    private void offerNotificationAccess() {
+        SharedPreferences preferences = getSharedPreferences("device_setup", MODE_PRIVATE);
+        if (notificationAccessGranted() || preferences.getBoolean("notification_access_explained", false)) return;
+        new AlertDialog.Builder(this)
+            .setTitle("Autorizar alertas de compra")
+            .setMessage("O Android precisa da sua autorização para mostrar no Meu Controle os alertas de compras dos bancos e do SMS 29194. Os avisos ficam na fila para sua revisão. Para usar um SMS antigo, compartilhe o texto pelo app Mensagens.")
+            .setPositiveButton("Abrir configurações", (dialog, which) -> openNotificationSettings())
+            .setNegativeButton("Agora não", null)
+            .setOnDismissListener(dialog -> preferences.edit().putBoolean("notification_access_explained", true).apply())
+            .show();
+    }
+
+    private void openNotificationSettings() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            Intent details = new Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, notificationListener().flattenToString());
+            try {
+                startActivity(details);
+                return;
+            } catch (ActivityNotFoundException ignored) {
+                // Some manufacturers only expose the general list.
+            }
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+        } catch (ActivityNotFoundException ignored) {
+            Toast.makeText(this, "Nas configurações do Android, procure Acesso às notificações.", Toast.LENGTH_LONG).show();
+        }
     }
 
     @Override protected void onActivityResult(int request, int status, Intent data) {
@@ -104,12 +164,19 @@ public class MainActivity extends Activity {
 
     private final class AlertsBridge {
         @JavascriptInterface public boolean enabled() {
-            NotificationManager manager = getSystemService(NotificationManager.class);
-            return manager.isNotificationListenerAccessGranted(new ComponentName(MainActivity.this, CardAlerts.class));
+            return notificationAccessGranted();
+        }
+
+        @JavascriptInterface public boolean connected() {
+            return CardAlerts.isConnected();
         }
 
         @JavascriptInterface public void openSettings() {
-            runOnUiThread(() -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
+            runOnUiThread(MainActivity.this::openNotificationSettings);
+        }
+
+        @JavascriptInterface public String takeSharedMessage() {
+            return sharedMessage.getAndSet(null);
         }
 
         @JavascriptInterface public String pending() {

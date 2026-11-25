@@ -1,5 +1,5 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
-  identifyStatementRows, importStatementRows, installmentCount} from './ledger.mjs?v=15';
+  identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate} from './ledger.mjs?v=17';
 import {mergeEntries, syncEntries} from './sync.mjs?v=13';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
@@ -64,9 +64,13 @@ function render() {
   const category = $('category-filter').value;
   const selected = entries.filter(entry =>
     !entry.deleted && (!card || entry.bank === card) && (!category || categoryOf(entry) === category));
-  const visible = selected.map(entry => ({entry, bill:forMonth(entry,month)})).filter(row => row.bill);
+  const visible = selected.map(entry => ({entry, bill:forMonth(entry,month),
+    forecast: Boolean(entry.projection) || entry.month < month})).filter(row => row.bill);
   visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
   $('total').textContent = brl(visible.reduce((sum,row) => sum + row.bill.cents,0));
+  const projected = visible.filter(row => row.forecast);
+  $('total-caption').textContent = !projected.length ? 'Total da fatura registrada'
+    : projected.length === visible.length ? 'Total previsto no mês' : 'Total registrado e previsto';
   $('future').textContent = brl(selected.reduce((sum,entry) => sum + futureTotal(entry,month),0));
   $('pending').textContent = visible.filter(({entry}) => !installmentCount(entry)).length;
   drawBars('category-chart', groupCharges(visible, categoryOf));
@@ -78,19 +82,36 @@ function render() {
   $('pending-entries').replaceChildren();
   $('pending-section').hidden = !results.some(({entry}) => !installmentCount(entry));
   if (!results.length) $('entries').textContent = 'Nenhum lançamento encontrado.';
-  for (const {entry,bill} of results) {
-    const button = document.createElement('button');
-    button.className = 'entry';
+  for (const {entry,bill,forecast} of results) {
+    const card = document.createElement('div');
+    card.className = 'entry-card';
+    const header = document.createElement('div');
+    header.className = 'entry-card-header';
     const detail = document.createElement('span');
     detail.textContent = entry.name;
     const subtitle = document.createElement('small');
-    subtitle.textContent = [categoryOf(entry), entry.bank, entry.date.split('-').reverse().join('/'), paymentLabel(entry, bill.part)].join(' · ');
+    subtitle.textContent = [categoryOf(entry), entry.bank, entry.date.split('-').reverse().join('/'),
+      paymentLabel(entry, bill.part), forecast ? 'Previsto' : ''].filter(Boolean).join(' · ');
     detail.append(subtitle);
     const value = document.createElement('b');
     value.textContent = brl(bill.cents);
-    button.append(detail,value);
-    button.onclick = () => edit(entry);
-    $(installmentCount(entry) ? 'entries' : 'pending-entries').append(button);
+    header.append(detail,value);
+    const actions = document.createElement('div');
+    actions.className = 'entry-card-actions';
+    const editButton = document.createElement('button');
+    editButton.type = 'button';
+    editButton.textContent = 'Editar';
+    editButton.setAttribute('aria-label', 'Editar ' + entry.name);
+    editButton.onclick = () => edit(entry);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'danger-action';
+    deleteButton.textContent = 'Excluir';
+    deleteButton.setAttribute('aria-label', 'Excluir ' + entry.name);
+    deleteButton.onclick = () => deleteEntry(entry);
+    actions.append(editButton, deleteButton);
+    card.append(header, actions);
+    $(installmentCount(entry) ? 'entries' : 'pending-entries').append(card);
   }
 }
 
@@ -187,10 +208,10 @@ $('save-pdf').onclick = () => {
 
 function edit(entry) {
   editing = entry;
-  $('delete-entry').hidden = !entry.id;
   fields.name.value = entry.name || '';
   fields.bank.value = entry.bank || $('bank').value;
   fields.date.value = entry.date || localDate;
+  $('entry-date-label').textContent = entry.dateIsReference ? 'Data de referência' : 'Data da compra';
   fields.month.value = entry.month || $('month').value;
   fields.amount.value = entry.cents == null ? '' : (entry.cents/100).toFixed(2);
   fields.count.value = installmentCount(entry) ?? (entry.source || entry.id ? '' : 1);
@@ -264,25 +285,24 @@ form.onsubmit = event => {
   review();
 };
 
-$('delete-entry').onclick = () => {
-  if (!editing?.id || !confirm('Excluir este lançamento e suas parcelas vinculadas?')) return;
+function deleteEntry(selected) {
+  if (!confirm('Excluir este lançamento e suas parcelas vinculadas?')) return;
   const current = readEntries();
-  const entry = current.find(row => row.id === editing.id && !row.deleted);
+  const entry = current.find(row => row.id === selected.id && !row.deleted);
   if (!entry) {
-    $('match').textContent = 'Este lançamento já foi excluído.';
+    $('entry-status').textContent = 'Este lançamento já foi excluído.';
     return;
   }
   const removed = {id: entry.id, deleted: true, updatedAt: Math.max(Date.now(), (entry.updatedAt || 0) + 1)};
   const next = current.map(row => row.id === entry.id ? removed : row);
   try {localStorage.setItem(storageKey, JSON.stringify(next));}
-  catch { $('match').textContent = 'Falha ao excluir no aparelho.'; return; }
+  catch { $('entry-status').textContent = 'Falha ao excluir no aparelho.'; return; }
   lastDeletion = {entry, updatedAt: removed.updatedAt};
   entries = next;
-  $('editor').close();
   $('entry-status').textContent = 'Lançamento excluído.';
   $('undo-delete').hidden = false;
   render();
-};
+}
 
 $('undo-delete').onclick = () => {
   if (!lastDeletion) return;
@@ -388,7 +408,7 @@ async function importPdf(files) {
     pdfInput.value = '';
     return;
   }
-  const {value:month} = $('month');
+  let {value:month} = $('month');
   const {value:bank} = $('bank');
   pickPdf.disabled = true;
   status.textContent = 'Lendo ' + file.name + '…';
@@ -409,11 +429,17 @@ async function importPdf(files) {
     };
     const pdf = await documentTask.promise;
     const parsed = [];
+    const controls = {};
+    let dueDate;
     const imagePages = [];
     const textPages = [];
     for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
       const page = await pdf.getPage(pageNo);
       const {items} = await page.getTextContent();
+      if (pageNo === 1) {
+        dueDate = statementDueDate(items);
+        if (dueDate) month = dueDate.slice(0, 7);
+      }
       if (!items.some(item => item.str?.trim())) {
         imagePages.push(page);
         continue;
@@ -421,7 +447,7 @@ async function importPdf(files) {
       textPages.push(page);
       const width = page.getViewport({scale: 1}).width;
       const lines = statementTextRows(items, width, bank);
-      parsed.push(...parseStatement(lines,month,bank));
+      parsed.push(...parseStatement(lines, month, bank, controls));
     }
     // Some scans have a text layer whose words do not align with the printed rows.
     const pagesToRecognize = parsed.length ? imagePages : [...imagePages, ...textPages];
@@ -430,10 +456,11 @@ async function importPdf(files) {
       for (const page of pagesToRecognize.sort((a,b) => a.pageNumber - b.pageNumber)) {
         status.textContent = 'Reconhecendo o texto da página ' + page.pageNumber + ' de ' + pdf.numPages + '…';
         ocr ||= await createPdfOcr();
-        parsed.push(...parseStatement(await ocr.read(page, bank), month, bank));
+        parsed.push(...parseStatement(await ocr.read(page, bank), month, bank, controls));
       }
     }
-    const imported = identifyStatementRows(parsed).map(row => ({...row, category: suggestCategory(row.name)}));
+    const imported = identifyStatementRows(applyStatementForecast(parsed, month, controls))
+      .map(row => ({...row, category: suggestCategory(row.name)}));
     statementRows = imported;
     const {alreadyRecorded} = importStatementRows(readEntries(), imported, () => Symbol(), 0);
     const remaining = imported.filter(row => !alreadyRecorded.has(row));
@@ -449,7 +476,8 @@ async function importPdf(files) {
       status.textContent = 'Todos os ' + imported.length + ' lançamentos reconhecidos nesta fatura já estão registrados.';
     } else {
       const skipped = alreadyRecorded.size ? ' ' + alreadyRecorded.size + ' já registrados foram ocultados.' : '';
-      status.textContent = remaining.length + ' para lançar ou revisar em ' + file.name + '.' + skipped +
+      const due = dueDate ? ' Vencimento ' + dueDate.split('-').reverse().join('/') + '.' : '';
+      status.textContent = remaining.length + ' para lançar ou revisar em ' + file.name + '.' + due + skipped +
         (ocr ? ' Confira os dados reconhecidos.' : '') + ' Depois, toque em Lançar selecionados.';
     }
   } catch (error) {

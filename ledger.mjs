@@ -14,6 +14,47 @@ export function parseNotice(text) {
 const toCents = value => Math.round(Number(value.replaceAll('.', '').replace(',', '.')) * 100);
 const forecastHeading = /^compras\s+parceladas\b(?:\s*[-–—]\s*pr|.*\bpr[oó]ximas faturas\b)/i;
 const forecastEnd = /^(?:pr[oó]xima fatura|demais faturas|total para pr[oó]ximas faturas)\b/i;
+const statementTax = /^repasse\s+de\s+iof\s+em\s+r\$\s+([\d.]+,\d{2})$/i;
+
+function forecastControl(text) {
+  const compact = text.normalize('NFD').replace(/\p{Diacritic}|\s/gu, '').toLowerCase();
+  const amount = compact.match(/([\d.]+,\d{2})$/);
+  if (!amount) return null;
+  if (compact.startsWith('proximafatura')) return ['nextCents', toCents(amount[1])];
+  if (compact.startsWith('totalparaproximasfaturas')) return ['futureCents', toCents(amount[1])];
+  return null;
+}
+
+export function statementDueDate(items) {
+  const format = /\b(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})\b/;
+  const dates = new Map();
+  const add = match => {
+    if (!match) return;
+    const date = match[3] + '-' + match[2] + '-' + match[1];
+    const parsed = new Date(date + 'T00:00Z');
+    if (Number.isFinite(+parsed) && parsed.toISOString().slice(0, 10) === date) {
+      dates.set(date, (dates.get(date) || 0) + 1);
+    }
+  };
+  for (const item of items) {
+    const label = item.str?.trim() || '';
+    if (!/^vencimento\s*:?($|\s*\d)/i.test(label)) continue;
+    const inline = label.match(format);
+    if (inline) {
+      add(inline);
+      continue;
+    }
+    const x = item.transform[4];
+    const y = item.transform[5];
+    const nearby = items.filter(other => other !== item && /^\s*\d/.test(other.str || '') &&
+      other.transform[4] >= x - 4 && other.transform[4] <= x + 96 &&
+      other.transform[5] <= y + 2 && other.transform[5] >= y - 24);
+    const matches = new Set(nearby.map(other => other.str.match(format)?.[0]).filter(Boolean));
+    if (matches.size === 1) add([...matches][0].match(format));
+  }
+  const ordered = [...dates].sort((a, b) => b[1] - a[1]);
+  return ordered.length && ordered[0][1] !== ordered[1]?.[1] ? ordered[0][0] : null;
+}
 
 export function statementTextRows(items, pageWidth, bank) {
   const rows = [];
@@ -37,8 +78,18 @@ export function statementTextRows(items, pageWidth, bank) {
     for (const column of [0, 1]) {
       const region = words.filter(word => Number(word.x / pageWidth >= layout.split) === column);
       const label = region.map(word => word.text).join(' ');
+      const control = bank === 'Itaú' && forecastControl(label);
+      if (control) {
+        forecast[column] = false;
+        lines.push(label);
+        continue;
+      }
       if (forecastHeading.test(label)) forecast[column] = true;
       else if (forecastEnd.test(label)) forecast[column] = false;
+      if (bank === 'Itaú' && statementTax.test(label)) {
+        lines.push(label);
+        continue;
+      }
       const dateIndex = region.findIndex(word =>
         /^\d{2}\s*\/\s*\d{2}(?!\d)/.test(word.text) && Math.abs(word.x / pageWidth - layout.dates[column]) < .028);
       if (dateIndex < 0) continue;
@@ -57,12 +108,21 @@ export function statementTextRows(items, pageWidth, bank) {
   return lines;
 }
 
-export function parseStatement(lines, month, bank) {
+export function parseStatement(lines, month, bank, controls = {}) {
   let forecast = false;
   return lines.flatMap(line => {
     const text = typeof line === 'string' ? line : line.text;
     if (forecastHeading.test(text)) { forecast = true; return []; }
+    const control = bank === 'Itaú' && forecastControl(text);
+    if (control) {
+      controls[control[0]] = control[1];
+      forecast = false;
+      return [];
+    }
     if (forecastEnd.test(text)) { forecast = false; return []; }
+    const tax = bank === 'Itaú' && text.match(statementTax);
+    if (tax) return [{name:'Repasse de IOF', date:month + '-01', dateIsReference:true, bank, month,
+      cents:toCents(tax[1]), count:1, part:1, source:'pdf', statementValue:true}];
     const nextBill = forecast || line.nextBill === true;
     const row = text.match(/^\s*(\d{2})\s*\/\s*(\d{2})(?:\s*\/\s*(\d{4}|\d{2}))?(?:\s+|(?=[\p{L}*]))(.+?)\s+(?:R\s*\$\s*)?([-−]?\s*[\d.]+,\s*\d{2})\s*([CD])?\s*$/iu);
     if (!row) return [];
@@ -112,6 +172,7 @@ function monthAfter(month) {
 }
 
 export function forMonth(entry, month) {
+  if (entry.billOnly && month !== entry.month) return null;
   if (!entry.count) return entry.month === month ? {part:entry.part, cents:entry.cents} : null;
   const part = entry.part + monthNumber(month) - monthNumber(entry.month);
   if (part < (entry.statementValue ? entry.part : 1) || part > (entry.count || 1)) return null;
@@ -119,11 +180,21 @@ export function forMonth(entry, month) {
 }
 
 export function futureTotal(entry, month) {
+  if (entry.billOnly) return entry.month > month ? entry.cents : 0;
   if (!entry.count) return 0;
   const first = Math.max(entry.statementValue ? entry.part : 1, entry.part + monthNumber(month) - monthNumber(entry.month) + 1);
   let cents = 0;
   for (let part = first; part <= entry.count; part++) cents += charge(entry, part);
   return cents;
+}
+
+export function applyStatementForecast(rows, month, controls) {
+  const projected = rows.filter(row => row.projection);
+  if (!projected.length || projected.some(row => !row.count)) return rows;
+  const nextCents = projected.reduce((total, row) => total + row.cents, 0);
+  const futureCents = projected.reduce((total, row) => total + futureTotal(row, month), 0);
+  if (nextCents !== controls.nextCents || futureCents !== controls.futureCents) return rows;
+  return rows.map(row => !row.projection && row.count > 1 ? {...row, billOnly:true} : row);
 }
 
 const normalized = value => value.replace(installmentMarker, '').replace(incompleteInstallment, '').normalize('NFD')
@@ -155,7 +226,7 @@ export function importStatementRows(entries, rows, createId, now, selected) {
   const preview = selected === undefined;
   selected ??= new Set(rows);
   const saved = new Map(entries.map(entry => [entry.id, entry]));
-  const knownKeys = new Set(entries.map(entry => entry.statementKey).filter(Boolean));
+  const knownKeys = new Map(entries.filter(entry => entry.statementKey).map(entry => [entry.statementKey, entry]));
   const usedByMonth = new Map();
   const pending = [];
   let added = 0;
@@ -163,8 +234,15 @@ export function importStatementRows(entries, rows, createId, now, selected) {
   const alreadyRecorded = new Set();
   const ordered = [...rows].sort((a, b) => Number(Boolean(a.projection)) - Number(Boolean(b.projection)));
   for (const row of ordered) {
-    if (knownKeys.has(row.statementKey)) {
-      if (selected.has(row)) alreadyRecorded.add(row);
+    const known = knownKeys.get(row.statementKey);
+    if (known) {
+      const confirmed = known.projection && !row.projection;
+      const forecastUpdated = row.billOnly && !known.billOnly;
+      if (selected.has(row) && (confirmed || forecastUpdated)) {
+        saved.set(known.id, {...known, ...(confirmed && {projection:false}),
+          ...(forecastUpdated && {billOnly:true}), updatedAt:Math.max(now, (known.updatedAt || 0) + 1)});
+        updated++;
+      } else if (selected.has(row)) alreadyRecorded.add(row);
       continue;
     }
     if (!usedByMonth.has(row.month)) usedByMonth.set(row.month, new Set());
@@ -187,6 +265,12 @@ export function importStatementRows(entries, rows, createId, now, selected) {
       continue;
     }
     const bill = forMonth(existing, row.month);
+    if (row.billOnly && !existing.billOnly && existing.statementValue && existing.month === row.month &&
+        bill?.part === row.part && bill.cents === row.cents) {
+      saved.set(existing.id, {...existing, billOnly:true, updatedAt:Math.max(now, (existing.updatedAt || 0) + 1)});
+      updated++;
+      continue;
+    }
     if ((row.count === 1 && bill?.cents === row.cents) ||
         (existing.statementValue && !row.count) ||
         (row.count && existing.count === row.count && bill?.part === row.part && bill.cents === row.cents)) {

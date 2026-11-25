@@ -268,17 +268,17 @@ async function importPdf(files) {
       }
     };
     const pdf = await documentTask.promise;
-    const lines = [];
+    const parsed = [];
+    const imagePages = [];
+    const textPages = [];
     for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
       const page = await pdf.getPage(pageNo);
       const {items} = await page.getTextContent();
       if (!items.some(item => item.str?.trim())) {
-        status.textContent = 'Reconhecendo o texto da página ' + pageNo + ' de ' + pdf.numPages + '…';
-        const {createPdfOcr} = await import('./ocr.mjs');
-        ocr ||= await createPdfOcr();
-        lines.push(...await ocr.read(page, bank));
+        imagePages.push(page);
         continue;
       }
+      textPages.push(page);
       const rows = [];
       for (const item of items) {
         if (!item.str?.trim()) continue;
@@ -287,9 +287,19 @@ async function importPdf(files) {
         if (row) row.items.push({x,text:item.str.trim()});
         else rows.push({y,items:[{x,text:item.str.trim()}]});
       }
-      lines.push(...rows.sort((a,b)=>b.y-a.y).map(row=>row.items.sort((a,b)=>a.x-b.x).map(item=>item.text).join(' ')));
+      const lines = rows.sort((a,b)=>b.y-a.y).map(row=>row.items.sort((a,b)=>a.x-b.x).map(item=>item.text).join(' '));
+      parsed.push(...parseStatement(lines,month,bank));
     }
-    const parsed = parseStatement(lines,month,bank);
+    // Some scans have a text layer whose words do not align with the printed rows.
+    const pagesToRecognize = parsed.length ? imagePages : [...imagePages, ...textPages];
+    if (pagesToRecognize.length) {
+      const {createPdfOcr} = await import('./ocr.mjs?v=8');
+      for (const page of pagesToRecognize.sort((a,b) => a.pageNumber - b.pageNumber)) {
+        status.textContent = 'Reconhecendo o texto da página ' + page.pageNumber + ' de ' + pdf.numPages + '…';
+        ocr ||= await createPdfOcr();
+        parsed.push(...parseStatement(await ocr.read(page, bank), month, bank));
+      }
+    }
     queue = [...queue.filter(entry => entry.source !== 'pdf'),...parsed];
     review();
     status.textContent = parsed.length

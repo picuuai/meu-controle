@@ -14,7 +14,19 @@ const form = $('form');
 const fields = form.elements;
 const storageKey = 'meu-controle-ledger';
 const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
+const cardStorageKey = 'meu-controle-active-cards';
+const defaultCards = ['Itaú', 'CAIXA'];
+const cardKey = name => name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
+function readCards() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(cardStorageKey));
+    if (Array.isArray(saved) && saved.every(card => typeof card === 'string' && card.trim())) return saved;
+  } catch { /* Use the starting cards if the saved list cannot be read. */ }
+  return [...defaultCards];
+}
 let entries = readEntries();
+let activeCards = readCards();
+let readingPdf = false;
 let queue = [];
 const selectedPdf = new Set();
 let statementRows = [];
@@ -28,6 +40,84 @@ const periodFormat = new Intl.DateTimeFormat('pt-BR', {month:'long', year:'numer
 
 for (const category of categories) fields.category.add(new Option(category, category));
 for (const category of [...categories, uncategorized]) $('category-filter').add(new Option(category, category));
+
+function setCardOptions(select, cards, value, emptyLabel) {
+  select.replaceChildren();
+  if (emptyLabel) select.append(new Option(emptyLabel, ''));
+  for (const card of cards) select.add(new Option(card, card));
+  if (cards.includes(value) || emptyLabel) select.value = cards.includes(value) ? value : '';
+}
+
+function historicCards() {
+  return [...new Set(entries.filter(entry => !entry.deleted && entry.bank).map(entry => entry.bank))];
+}
+
+function renderCardSettings() {
+  const list = $('managed-cards');
+  list.replaceChildren();
+  if (!activeCards.length) {
+    const empty = document.createElement('li');
+    empty.textContent = 'Nenhum cartão cadastrado.';
+    list.append(empty);
+  }
+  for (const name of activeCards) {
+    const row = document.createElement('li');
+    const label = document.createElement('span');
+    label.textContent = name;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'danger-action';
+    remove.textContent = 'Remover';
+    remove.setAttribute('aria-label', 'Remover cartão ' + name);
+    remove.onclick = () => saveCards(readCards().filter(card => card !== name), 'Cartão removido da lista ativa.');
+    row.append(label, remove);
+    list.append(row);
+  }
+  setCardOptions($('bank'), activeCards, $('bank').value);
+  const noCards = !activeCards.length;
+  $('bank').disabled = noCards;
+  $('pick-pdf').disabled = noCards || readingPdf;
+  $('no-active-cards').hidden = !noCards;
+}
+
+function saveCards(cards, message) {
+  try {localStorage.setItem(cardStorageKey, JSON.stringify(cards));}
+  catch {
+    $('card-status').textContent = 'Não foi possível salvar os cartões neste aparelho.';
+    return false;
+  }
+  activeCards = cards;
+  renderCardSettings();
+  resetEntryPage();
+  $('card-status').textContent = message;
+  return true;
+}
+
+$('card-form').onsubmit = event => {
+  event.preventDefault();
+  const field = $('card-name');
+  const name = field.value.trim().replace(/\s+/g, ' ');
+  if (!name) {
+    $('card-status').textContent = 'Informe o nome do cartão.';
+    return;
+  }
+  const cards = readCards();
+  const key = cardKey(name);
+  if (cards.some(card => cardKey(card) === key)) {
+    $('card-status').textContent = 'Esse cartão já está cadastrado.';
+    return;
+  }
+  const canonical = [...defaultCards, ...historicCards()].find(card => cardKey(card) === key) || name;
+  if (saveCards([...cards, canonical], 'Cartão cadastrado.')) field.value = '';
+};
+
+window.addEventListener('storage', event => {
+  if (event.key !== cardStorageKey && event.key !== storageKey) return;
+  activeCards = readCards();
+  entries = readEntries();
+  renderCardSettings();
+  render();
+});
 
 function showView() {
   const requested = location.hash.slice(1);
@@ -137,8 +227,7 @@ function drawTrend(series, month) {
 function renderBills(month) {
   const bills = $('bill-cards');
   bills.replaceChildren();
-  for (const option of $('bank').options) {
-    const bank = option.value;
+  for (const bank of activeCards) {
     const charges = entries.filter(entry => !entry.deleted && entry.bank === bank)
       .map(entry => forMonth(entry, month)).filter(Boolean);
     const card = document.createElement('section');
@@ -169,6 +258,7 @@ function resetEntryPage() {
 
 function render() {
   const month = $('month').value;
+  setCardOptions($('filter'), [...new Set([...activeCards, ...historicCards()])], $('filter').value, 'Todos');
   const card = $('filter').value;
   const category = $('category-filter').value;
   const selected = entries.filter(entry =>
@@ -375,6 +465,10 @@ function review(refreshPdf = true) {
 $('save-pdf').onclick = () => {
   const rows = queue.filter(item => selectedPdf.has(item));
   if (!rows.length) return;
+  if (rows.some(row => !activeCards.includes(row.bank))) {
+    $('status').textContent = 'Cadastre novamente o cartão de origem em Gerenciar cartões para concluir esta importação.';
+    return;
+  }
   for (const row of $('pdf-rows').querySelectorAll('.pdf-row')) {
     if (!row.querySelector('input[type=checkbox]').checked) continue;
     for (const input of row.querySelectorAll('input[type=number]')) {
@@ -403,9 +497,16 @@ $('save-pdf').onclick = () => {
 };
 
 function edit(entry) {
+  if (!entry.id && !activeCards.length) {
+    location.hash = 'configuracoes';
+    $('card-status').textContent = 'Cadastre um cartão para lançar compras.';
+    return;
+  }
   editing = entry;
   fields.name.value = entry.name || '';
-  fields.bank.value = entry.bank || $('bank').value;
+  const cards = entry.id && entry.bank && !activeCards.includes(entry.bank) ? [...activeCards, entry.bank] : activeCards;
+  const requestedCard = entry.bank || $('bank').value;
+  setCardOptions(fields.bank, cards, requestedCard, cards.includes(requestedCard) ? '' : 'Escolher cartão');
   fields.date.value = entry.date || localDate;
   $('entry-date-label').textContent = entry.dateIsReference ? 'Data de referência' : 'Data da compra';
   fields.month.value = entry.month || $('month').value;
@@ -728,6 +829,7 @@ async function importPdf(files) {
   }
   let {value:month} = $('month');
   const {value:bank} = $('bank');
+  readingPdf = true;
   pickPdf.disabled = true;
   status.textContent = 'Lendo ' + file.name + '…';
   let documentTask;
@@ -814,7 +916,8 @@ async function importPdf(files) {
   } finally {
     await ocr?.close().catch(() => {});
     await documentTask?.destroy().catch(()=>{});
-    pickPdf.disabled = false;
+    readingPdf = false;
+    pickPdf.disabled = !activeCards.length;
     pdfInput.value = '';
   }
 }
@@ -829,6 +932,7 @@ if (window.AndroidAlerts) {
   }
   if (window.AndroidAlerts.installedVersion) {
     $('android-update').hidden = false;
+    $('android-version').textContent = 'Versão Android ' + window.AndroidAlerts.installedVersion();
     let updateUrl;
     const checkUpdate = async (silent = false) => {
       const status = $('update-status');
@@ -930,5 +1034,6 @@ if (window.AndroidAlerts) {
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.warn);
 }
 showView();
+renderCardSettings();
 render();
 review();

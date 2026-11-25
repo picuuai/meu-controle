@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=25"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=26"><title>Meu Controle</title></head><body>
 <header class="app-header">
   <a class="brand" href="#painel"><img src="./icon-192.png" alt="" width="32" height="32">Meu Controle</a>
   <a class="settings-link" href="#configuracoes" data-view-link="configuracoes">Configurações</a>
@@ -13,7 +13,7 @@
 
   <div id="app-filters" class="filters">
     <label>Mês da fatura <input id="month" type="month"></label>
-    <label id="app-card-filter">Cartão <select id="filter"><option value="">Todos</option><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label>
+    <label id="app-card-filter">Cartão <select id="filter"><option value="">Todos</option></select></label>
     <label id="app-category-filter">Categoria <select id="category-filter"><option value="">Todas</option></select></label>
   </div>
 
@@ -60,7 +60,8 @@
     <div class="view-header"><h1 id="bills-title">Faturas</h1></div>
     <div id="bill-cards" class="bill-cards"></div>
     <section class="panel import-panel"><h2>Importar fatura</h2>
-      <label>Cartão de origem <select id="bank"><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label>
+      <label>Cartão de origem <select id="bank"></select></label>
+      <p id="no-active-cards" hidden>Cadastre um cartão para importar uma fatura. <a href="#configuracoes">Gerenciar cartões</a></p>
       <div class="pdf-drop" id="pdf-drop">
         <p>Arraste o PDF da fatura para cá</p>
         <button id="pick-pdf" type="button">Escolher PDF</button>
@@ -93,6 +94,15 @@
 
   <section data-view="configuracoes" aria-labelledby="settings-title" hidden>
     <div class="view-header"><h1 id="settings-title">Configurações</h1></div>
+    <section class="panel settings-cards">
+      <h2>Gerenciar cartões</h2>
+      <ul id="managed-cards" class="managed-cards"></ul>
+      <form id="card-form">
+        <label>Nome do cartão<input id="card-name" type="text" maxlength="40" required placeholder="Ex.: Nubank"></label>
+        <button type="submit">Cadastrar cartão</button>
+      </form>
+      <p id="card-status" role="status"></p>
+    </section>
     <section class="panel settings-appearance"><h2>Aparência e instalação</h2>
       <label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label>
       <button id="install-app" type="button" hidden>Instalar versão web</button>
@@ -102,7 +112,7 @@
       <p id="native-status" role="status">Versão web. Para ler automaticamente os avisos bancários e as notificações de SMS, instale o APK do Android.</p></div>
       <button id="native" type="button" hidden>Ativar acesso às notificações</button>
       <a id="android-builds" href="./meu-controle-android.apk">Baixar APK do Android</a>
-      <div id="android-update" hidden><button id="check-update" type="button">Verificar atualização</button>
+      <div id="android-update" hidden><p id="android-version"></p><button id="check-update" type="button">Verificar atualização</button>
         <button id="get-update" type="button" hidden>Baixar atualização</button><p id="update-status" role="status"></p></div>
     </section>
     <section class="panel settings-sync"><details><summary>Sincronização com GitHub</summary>
@@ -116,7 +126,7 @@
     </details></section>
   </section>
 </main>
-<dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><div class="pair"><label>Cartão<select name="bank"><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label><label>Categoria<select name="category"><option value="">Sem categoria</option></select></label></div><div class="pair"><label><span id="entry-date-label">Data da compra</span><input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><button type="button" id="set-one-payment">À vista · 1 de 1</button><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
+<dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><div class="pair"><label>Cartão<select name="bank" required></select></label><label>Categoria<select name="category"><option value="">Sem categoria</option></select></label></div><div class="pair"><label><span id="entry-date-label">Data da compra</span><input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><button type="button" id="set-one-payment">À vista · 1 de 1</button><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
 <dialog id="install-help"><h2>Instalar Meu Controle</h2>
 <p>Abra <a href="./">o endereço do app</a> diretamente no navegador do aparelho.</p>
 <ul>
@@ -136,4 +146,4 @@
 <div class="actions"><button id="pair-pin-close" type="button">Cancelar</button><button type="submit">Parear e sincronizar</button></div>
 </form></dialog>
 <script src="./qrcode.js" defer></script>
-<script type="module" src="./app.mjs?v=25"></script></body></html>
+<script type="module" src="./app.mjs?v=26"></script></body></html>

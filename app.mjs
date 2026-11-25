@@ -1,4 +1,5 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates} from './ledger.mjs';
+import {mergeEntries, syncEntries} from './sync.mjs';
 
 const $ = id => document.getElementById(id);
 const money = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -7,7 +8,8 @@ const localDate = new Date().toLocaleDateString('sv-SE');
 const form = $('form');
 const fields = form.elements;
 const storageKey = 'meu-controle-ledger';
-let entries = JSON.parse(localStorage.getItem(storageKey) || '[]');
+const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
+let entries = readEntries();
 let queue = [];
 let editing;
 let receiptUrl;
@@ -96,13 +98,16 @@ form.onsubmit = event => {
     fields.part.reportValidity();
     return;
   }
+  const current = readEntries();
   const target = $('merge')?.value;
-  const existing = target && entries.find(row => row.id === target);
+  const existing = target && current.find(row => row.id === target);
   entry.id = entry.id || (existing ? existing.id : crypto.randomUUID());
+  const previous = current.find(row => row.id === entry.id);
+  entry.updatedAt = Math.max(Date.now(), (previous?.updatedAt || 0) + 1);
   // Preserve the start of an already confirmed installment series.
   const saved = existing?.count && existing.statementValue && existing.part < entry.part && existing.count === entry.count && existing.cents === entry.cents
     ? existing : entry;
-  const next = [...entries.filter(row => row.id !== entry.id),saved];
+  const next = [...current.filter(row => row.id !== entry.id),saved];
   try {localStorage.setItem(storageKey,JSON.stringify(next));}
   catch { $('match').textContent = 'Falha ao salvar no aparelho. Tente novamente.'; return; }
   entries = next;
@@ -112,6 +117,40 @@ form.onsubmit = event => {
   $('month').value = entry.month;
   render();
   review();
+};
+
+let syncToken = '';
+$('sync-form').onsubmit = async event => {
+  event.preventDefault();
+  const field = $('sync-token');
+  const status = $('sync-status');
+  syncToken = field.value.trim() || syncToken;
+  if (!syncToken) {
+    status.textContent = 'Informe o token do GitHub.';
+    field.focus();
+    return;
+  }
+  field.value = '';
+  $('sync-button').disabled = true;
+  status.textContent = 'Sincronizando…';
+  try {
+    const synced = await syncEntries(syncToken, readEntries);
+    const current = readEntries();
+    const next = mergeEntries(synced, current);
+    localStorage.setItem(storageKey, JSON.stringify(next));
+    entries = next;
+    render();
+    status.textContent = next.length === synced.length &&
+      next.every((entry, index) => entry === synced[index])
+      ? 'Lançamentos sincronizados.'
+      : 'Há alterações locais mais recentes. Sincronize novamente para enviá-las.';
+  } catch (error) {
+    status.textContent = error instanceof TypeError
+      ? 'Sem conexão com o GitHub. Tente novamente.'
+      : error.message;
+  } finally {
+    $('sync-button').disabled = false;
+  }
 };
 
 $('month').value = localDate.slice(0,7);

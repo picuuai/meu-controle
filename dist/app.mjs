@@ -95,7 +95,6 @@ function render() {
     detail.append(subtitle);
     const value = document.createElement('b');
     value.textContent = brl(bill.cents);
-    header.append(detail,value);
     const actions = document.createElement('div');
     actions.className = 'entry-card-actions';
     const editButton = document.createElement('button');
@@ -110,7 +109,11 @@ function render() {
     deleteButton.setAttribute('aria-label', 'Excluir ' + entry.name);
     deleteButton.onclick = () => deleteEntry(entry);
     actions.append(editButton, deleteButton);
-    card.append(header, actions);
+    const controls = document.createElement('div');
+    controls.className = 'entry-card-controls';
+    controls.append(value, actions);
+    header.append(detail, controls);
+    card.append(header);
     $(installmentCount(entry) ? 'entries' : 'pending-entries').append(card);
   }
 }

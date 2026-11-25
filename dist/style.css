@@ -54,10 +54,11 @@ html[data-theme=dark] .danger-action {color: #ffaaa0}
 
 .entry-card {border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 8px}
 .entry-card:last-child {margin-bottom: 0}
-.entry-card-header {display: flex; align-items: start; justify-content: space-between; gap: 12px}
-.entry-card-header span {min-width: 0; overflow-wrap: anywhere; font-weight: 700}
+.entry-card-header {display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap}
+.entry-card-header > span {flex: 1 1 135px; min-width: 0; overflow-wrap: anywhere; font-weight: 700}
 .entry-card-header small {display: block; margin-top: 3px; font-weight: 500}
 .entry-card-header b {white-space: nowrap}
-.entry-card-actions {display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px}
+.entry-card-controls {display: flex; align-items: center; gap: 10px; margin-left: auto}
+.entry-card-actions {display: flex; gap: 6px}
 .entry-card-actions button {font-size: .88rem; min-height: 40px}
 .entry-card-actions .danger-action {margin: 0}

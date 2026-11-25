@@ -1,6 +1,6 @@
-const cacheName = 'meu-controle-v7';
-const files = ['./','./index.html','./style.css?v=7','./app.mjs?v=7','./ledger.mjs','./sync.mjs','./dashboard.mjs','./manifest.webmanifest','./icon-192.png','./icon-512.png','./pdf.mjs','./pdf.worker.mjs',
-  './ocr.mjs','./ocr/tesseract.mjs','./ocr/worker.min.js','./ocr/tesseract-core-lstm.wasm.js','./ocr/por.traineddata.gz'];
+const cacheName = 'meu-controle-v8';
+const files = ['./','./index.html','./style.css?v=8','./app.mjs?v=8','./ledger.mjs','./sync.mjs','./dashboard.mjs','./manifest.webmanifest','./icon-192.png','./icon-512.png','./pdf.mjs','./pdf.worker.mjs',
+  './ocr.mjs?v=8','./ocr/tesseract.mjs','./ocr/worker.min.js','./ocr/tesseract-core-lstm.wasm.js','./ocr/por.traineddata.gz'];
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(cacheName);
   await Promise.all(files.map(async path => {

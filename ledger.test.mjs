@@ -9,6 +9,18 @@ test('alerta omisso mantém parcelas pendentes', () => {
   assert.equal(parseNotice('Compra de R$ 180,00 em Mercado em 6x').count,6);
 });
 
+test('alerta identifica Itaú e preserva o estabelecimento antes da data', () => {
+  assert.deepEqual(parseNotice('Itaú: Compra aprovada no valor de R$ 120,90 na loja Exemplo em 24/11/2026 em 3 vezes.'), {
+    name:'Exemplo', cents:12090, count:3, part:1, bank:'Itaú', date:'2026-11-24'
+  });
+});
+
+test('fatura digitalizada aceita espaços na data e no valor e preserva o sinal', () => {
+  const [entry] = parseStatement(['04 / 11 Loja 02/03 R$ − 15, 90'], '2026-11', 'CAIXA');
+  assert.equal(entry.cents, -1590);
+  assert.equal(entry.part, 2);
+});
+
 test('fatura reconhece a parcela atual e projeta apenas as seguintes', () => {
   const [entry] = parseStatement(['21/12 Mercado 03/06 30,00','22/12 Pagamento da fatura -180,00'],'2026-01','Itaú');
   assert.equal(entry.date,'2025-12-21');

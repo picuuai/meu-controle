@@ -276,7 +276,7 @@ async function importPdf(files) {
         status.textContent = 'Reconhecendo o texto da página ' + pageNo + ' de ' + pdf.numPages + '…';
         const {createPdfOcr} = await import('./ocr.mjs');
         ocr ||= await createPdfOcr();
-        lines.push(...await ocr.read(page));
+        lines.push(...await ocr.read(page, bank));
         continue;
       }
       const rows = [];
@@ -293,7 +293,8 @@ async function importPdf(files) {
     queue = [...queue.filter(entry => entry.source !== 'pdf'),...parsed];
     review();
     status.textContent = parsed.length
-      ? parsed.length + ' lançamentos encontrados em ' + file.name + '. Revise antes de salvar.'
+      ? parsed.length + ' lançamentos encontrados em ' + file.name + '.' +
+        (ocr ? ' Compare a lista com a fatura antes de salvar.' : ' Revise antes de salvar.')
       : 'Nenhum lançamento reconhecido no PDF. Confira se o arquivo contém a lista de compras e se o texto está legível.';
   } catch (error) {
     console.warn('Falha ao importar fatura', error.name);

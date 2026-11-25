@@ -569,6 +569,7 @@ async function importPdf(files) {
 }
 
 if (window.AndroidAlerts) {
+  $('android-builds').hidden = true;
   $('native').hidden = false;
   $('native').onclick = () => window.AndroidAlerts.openSettings();
   const refresh = () => {
@@ -605,6 +606,7 @@ if (window.AndroidAlerts) {
   const install = $('install-app');
   let installPrompt;
   install.hidden = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  install.textContent = 'Instalar versão web';
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
     installPrompt = event;

@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=5"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=6"><title>Meu Controle</title></head><body>
 <header><div class="brand"><span>▤</span> Meu Controle</div><label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label></header>
 <main>
 <section class="hero"><div><h1>Painel financeiro</h1><p>Faturas e parcelas dos seus cartões</p></div><div class="hero-actions"><button id="install-app" type="button" hidden>Instalar app</button><button id="add">+ Nova compra</button></div></section>
@@ -11,12 +11,17 @@
 </div>
 <div class="workspace"><section class="panel"><h2>Lançamentos</h2><label class="entry-search">Buscar descrição <input type="search" id="search" placeholder="Ex.: supermercado"></label><div id="entries"></div></section><section class="panel"><h2>Adicionar lançamentos</h2>
 <label>Cartão de origem <select id="bank"><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label>
-<label class="file">Selecionar PDF da fatura<input id="pdf" type="file" accept="application/pdf,.pdf"></label>
-<label class="file">Fotografar comprovante<input id="photo" type="file" accept="image/*" capture="environment"></label>
-<div id="receipt"></div>
+<div class="pdf-drop" id="pdf-drop">
+<p>Arraste o PDF da fatura para cá</p>
+<button id="pick-pdf" type="button">Escolher PDF</button>
+<input id="pdf" type="file" accept="application/pdf,.pdf" hidden>
+</div>
+<p id="status" role="status"></p>
 <label>Texto do alerta <textarea id="notice" rows="3" placeholder="Cole o texto da compra"></textarea></label>
-<button id="read">Revisar alerta</button><button id="native" hidden>Ativar notificações do Android</button>
-<p id="status" role="status"></p><div id="review"></div></section></div>
+<button id="read">Revisar alerta</button>
+<button id="native" hidden>Ativar notificações do Android</button>
+<p id="native-status" role="status">Para ler notificações automaticamente, use o app Android com acesso às notificações ativado.</p>
+<div id="review"></div></section></div>
 <section class="panel"><details><summary>Sincronização com GitHub</summary>
 <form id="sync-form" autocomplete="off"><p>O token fica disponível enquanto esta página estiver aberta.</p>
 <label>Token do GitHub<input id="sync-token" type="password" autocomplete="off" spellcheck="false"></label>
@@ -31,4 +36,4 @@
 <li><strong>Computador.</strong> No Chrome ou no Edge, procure a opção de instalar na barra de endereço ou no menu do navegador.</li>
 </ul>
 <form method="dialog" class="actions"><button type="submit">Fechar</button></form></dialog>
-<script type="module" src="./app.mjs?v=5"></script></body></html>
+<script type="module" src="./app.mjs?v=6"></script></body></html>

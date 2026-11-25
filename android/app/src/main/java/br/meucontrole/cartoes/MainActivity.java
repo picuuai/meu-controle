@@ -4,7 +4,8 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
-import android.provider.MediaStore;
+import android.app.NotificationManager;
+import android.content.ComponentName;
 import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 import android.webkit.JsPromptResult;
@@ -17,11 +18,8 @@ import android.webkit.WebViewClient;
 import android.widget.EditText;
 import android.text.InputType;
 import android.app.AlertDialog;
-import androidx.core.content.FileProvider;
 import androidx.webkit.WebViewAssetLoader;
 import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -29,8 +27,6 @@ import org.json.JSONObject;
 public class MainActivity extends Activity {
     private static final int PICK_FILE = 1;
     private ValueCallback<Uri[]> picker;
-    private Uri photo;
-    private File photoFile;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -56,6 +52,11 @@ public class MainActivity extends Activity {
                         return response;
                     }
                 }
+                if ("https".equals(uri.getScheme()) && "api.github.com".equals(uri.getHost())
+                        && ("/repos/picuuai/meu-controle_dados".equals(uri.getPath())
+                            || "/repos/picuuai/meu-controle_dados/contents/meu-controle/lancamentos.json".equals(uri.getPath()))) {
+                    return null;
+                }
                 return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
             }
 
@@ -78,26 +79,11 @@ public class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (picker != null) picker.onReceiveValue(null);
                 picker = callback;
-                photo = null;
-                if (photoFile != null) photoFile.delete();
-                photoFile = null;
                 try {
-                    boolean image = String.join(",", params.getAcceptTypes()).contains("image/");
-                    if (image && params.isCaptureEnabled()) {
-                        File folder = new File(getCacheDir(), "receipts");
-                        if (!folder.isDirectory() && !folder.mkdirs()) throw new IOException();
-                        photoFile = File.createTempFile("comprovante-", ".jpg", folder);
-                        photo = FileProvider.getUriForFile(MainActivity.this, getPackageName() + ".photos", photoFile);
-                        Intent camera = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                        camera.putExtra(MediaStore.EXTRA_OUTPUT, photo);
-                        camera.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-                        startActivityForResult(camera, PICK_FILE);
-                    } else {
-                        Intent file = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE);
-                        file.setType(image ? "image/*" : "application/pdf");
-                        startActivityForResult(file, PICK_FILE);
-                    }
-                } catch (IOException | android.content.ActivityNotFoundException failure) {
+                    Intent file = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE);
+                    file.setType("application/pdf");
+                    startActivityForResult(file, PICK_FILE);
+                } catch (android.content.ActivityNotFoundException failure) {
                     picker.onReceiveValue(null);
                     picker = null;
                 }
@@ -111,12 +97,17 @@ public class MainActivity extends Activity {
     @Override protected void onActivityResult(int request, int status, Intent data) {
         super.onActivityResult(request, status, data);
         if (request != PICK_FILE || picker == null) return;
-        Uri uri = status == RESULT_OK ? (photo != null ? photo : data == null ? null : data.getData()) : null;
+        Uri uri = status == RESULT_OK && data != null ? data.getData() : null;
         picker.onReceiveValue(uri == null ? null : new Uri[]{uri});
         picker = null;
     }
 
     private final class AlertsBridge {
+        @JavascriptInterface public boolean enabled() {
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            return manager.isNotificationListenerAccessGranted(new ComponentName(MainActivity.this, CardAlerts.class));
+        }
+
         @JavascriptInterface public void openSettings() {
             runOnUiThread(() -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         }

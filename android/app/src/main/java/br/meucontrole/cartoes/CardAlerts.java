@@ -16,6 +16,7 @@ public class CardAlerts extends NotificationListenerService {
     private static String bankFor(String packageName) {
         switch (packageName) {
             case "com.itau":
+            case "com.itau.pers":
             case "com.itaucard.activity":
                 return "Itaú";
             case "br.com.gabba.Caixa":
@@ -37,9 +38,12 @@ public class CardAlerts extends NotificationListenerService {
         Notification notification = alert.getNotification();
         if ((notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
         Bundle fields = notification.extras;
+        if (fields == null) return;
         CharSequence title = fields.getCharSequence(Notification.EXTRA_TITLE, "");
-        CharSequence body = fields.getCharSequence(Notification.EXTRA_BIG_TEXT,
-            fields.getCharSequence(Notification.EXTRA_TEXT, ""));
+        CharSequence body = fields.getCharSequence(Notification.EXTRA_BIG_TEXT, "");
+        CharSequence[] lines = fields.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        if (body.length() == 0 && lines != null) body = android.text.TextUtils.join("\n", lines);
+        if (body.length() == 0) body = fields.getCharSequence(Notification.EXTRA_TEXT, "");
         String text = title + "\n" + body;
         String lower = text.toLowerCase(Locale.ROOT);
         if (!lower.contains("compra") || !lower.contains("r$") ||

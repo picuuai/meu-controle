@@ -13,7 +13,6 @@ const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
 let entries = readEntries();
 let queue = [];
 let editing;
-let receiptUrl;
 let initialCategory;
 
 for (const category of categories) fields.category.add(new Option(category, category));
@@ -220,14 +219,42 @@ function theme() {
 $('theme').onchange = () => {localStorage.setItem('meu-controle-theme',$('theme').value); theme();};
 theme();
 
-$('pdf').onchange = async () => {
-  const file = $('pdf').files[0];
-  if (!file) return;
+const pdfInput = $('pdf');
+const dropZone = $('pdf-drop');
+const pickPdf = $('pick-pdf');
+pickPdf.onclick = () => pdfInput.click();
+pdfInput.onchange = () => importPdf(pdfInput.files);
+dropZone.ondragover = event => {
+  if (!event.dataTransfer.types.includes('Files')) return;
+  event.preventDefault();
+  event.dataTransfer.dropEffect = pickPdf.disabled ? 'none' : 'copy';
+  dropZone.classList.toggle('dragging', !pickPdf.disabled);
+};
+dropZone.ondragleave = event => {
+  if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove('dragging');
+};
+dropZone.ondrop = event => {
+  event.preventDefault();
+  dropZone.classList.remove('dragging');
+  importPdf(event.dataTransfer.files);
+};
+
+async function importPdf(files) {
+  if (!files.length || pickPdf.disabled) return;
+  const status = $('status');
+  const [file] = files;
+  if (files.length !== 1 || !/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+    status.textContent = 'Selecione um único arquivo PDF da fatura.';
+    pdfInput.value = '';
+    return;
+  }
   const {value:month} = $('month');
   const {value:bank} = $('bank');
-  $('pdf').disabled = true;
-  $('status').textContent = 'Lendo a fatura…';
+  pickPdf.disabled = true;
+  status.textContent = 'Lendo ' + file.name + '…';
   let documentTask;
+  let ocr;
+  let canceled = false;
   try {
     const pdfjs = await import('./pdf.mjs');
     pdfjs.GlobalWorkerOptions.workerSrc = new URL('./pdf.worker.mjs',import.meta.url).href;
@@ -235,13 +262,23 @@ $('pdf').onchange = async () => {
     documentTask.onPassword = (resolve, reason) => {
       const password = prompt(reason === 2 ? 'Senha incorreta. Informe a senha do PDF.' : 'Informe a senha do PDF.');
       if (password) resolve(password);
-      else documentTask.destroy();
+      else {
+        canceled = true;
+        documentTask.destroy().catch(() => {});
+      }
     };
     const pdf = await documentTask.promise;
     const lines = [];
     for (let pageNo = 1; pageNo <= pdf.numPages; pageNo++) {
       const page = await pdf.getPage(pageNo);
       const {items} = await page.getTextContent();
+      if (!items.some(item => item.str?.trim())) {
+        status.textContent = 'Reconhecendo o texto da página ' + pageNo + ' de ' + pdf.numPages + '…';
+        const {createPdfOcr} = await import('./ocr.mjs');
+        ocr ||= await createPdfOcr();
+        lines.push(...await ocr.read(page));
+        continue;
+      }
       const rows = [];
       for (const item of items) {
         if (!item.str?.trim()) continue;
@@ -255,36 +292,30 @@ $('pdf').onchange = async () => {
     const parsed = parseStatement(lines,month,bank);
     queue = [...queue.filter(entry => entry.source !== 'pdf'),...parsed];
     review();
-    $('status').textContent = parsed.length ? parsed.length + ' lançamentos encontrados. Revise antes de salvar.' : 'Nenhuma compra reconhecida. Confira se a fatura tem texto selecionável.';
-  } catch {
-    $('status').textContent = 'Não foi possível ler o PDF. Confira o arquivo e a senha.';
+    status.textContent = parsed.length
+      ? parsed.length + ' lançamentos encontrados em ' + file.name + '. Revise antes de salvar.'
+      : 'Nenhum lançamento reconhecido no PDF. Confira se o arquivo contém a lista de compras e se o texto está legível.';
+  } catch (error) {
+    console.warn('Falha ao importar fatura', error.name);
+    status.textContent = canceled ? 'Importação cancelada.' : error.name === 'InvalidPDFException'
+      ? 'O arquivo não é um PDF válido.'
+      : 'Não foi possível abrir o PDF. Confira se o arquivo abre normalmente e tente novamente.';
   } finally {
+    await ocr?.close().catch(() => {});
     await documentTask?.destroy().catch(()=>{});
-    $('pdf').disabled = false;
-    $('pdf').value = '';
+    pickPdf.disabled = false;
+    pdfInput.value = '';
   }
-};
-
-$('photo').onchange = () => {
-  const file = $('photo').files[0];
-  if (!file) return;
-  if (receiptUrl) URL.revokeObjectURL(receiptUrl);
-  receiptUrl = URL.createObjectURL(file);
-  const image = new Image();
-  image.src = receiptUrl;
-  image.alt = 'Prévia do comprovante';
-  const button = document.createElement('button');
-  button.textContent = 'Digitar a compra do comprovante';
-  button.onclick = () => edit({});
-  $('receipt').className = 'receipt';
-  $('receipt').replaceChildren(image,button);
-  $('photo').value = '';
-};
+}
 
 if (window.AndroidAlerts) {
   $('native').hidden = false;
   $('native').onclick = () => window.AndroidAlerts.openSettings();
   const refresh = () => {
+    const enabled = window.AndroidAlerts.enabled?.();
+    $('native-status').textContent = enabled
+      ? 'Acesso às notificações ativado. Novos alertas de compra aparecem abaixo para revisão.'
+      : 'Autorize Meu Controle nas configurações do Android para receber alertas.';
     const alerts = JSON.parse(window.AndroidAlerts.pending());
     queue = [...queue.filter(row => !row.nativeKey), ...alerts.filter(alert => !entries.some(entry => entry.nativeKey === alert.key)).map(alert => ({
       ...parseNotice(alert.text), bank:alert.bank, date:alert.date, month:alert.date.slice(0,7), nativeKey:alert.key, source:'alert'

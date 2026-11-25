@@ -4,6 +4,8 @@ import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statemen
 import {identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast,
   statementDueDate, statementReferenceMonth} from './dist/ledger.mjs';
 import {suggestCategory} from './dist/dashboard.mjs';
+import {parseSmsText} from './dist/sms.mjs';
+import {createPairing, readPairing} from './dist/pairing.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -25,6 +27,23 @@ test('SMS da CAIXA identifica loja, valor e horário sem confundir o final do ca
   assert.deepEqual(installment, {name:'MERCADOLIVRE*MERC', cents:26404, count:4, part:1, bank:'CAIXA', date:'2026-11-08', time:'14:39'});
   const compact = parseNotice('sup caracol compra  5860 24/11/2026', '2026-11-24');
   assert.deepEqual(compact, {name:'sup caracol', cents:5860, count:null, part:1, bank:'CAIXA', date:'2026-11-24'});
+});
+
+test('texto com vários SMS preserva data, valor e parcelas de cada compra', () => {
+  const text = 'CAIXA: Compra aprovada em Loja A, R$ 58,60, 24/11 as 15:24.\n' +
+    'CAIXA: Compra aprovada em Loja B R$ 264,04 em 4 vezes, 08/11 as 14:39.';
+  assert.deepEqual(parseSmsText(text, '2026-11-24').map(row => [row.name,row.cents,row.count]), [
+    ['Loja A',5860,null], ['Loja B',26404,4]
+  ]);
+});
+
+test('QR transfere a configuração cifrada e rejeita código incorreto', async () => {
+  const token = 'token-ficticio';
+  const {code,pin} = await createPairing(token);
+  assert.equal(code.includes(token), false);
+  assert.equal(await readPairing(code,pin), token);
+  const wrong = (pin[0] === '0' ? '1' : '0') + pin.slice(1);
+  await assert.rejects(readPairing(code,wrong), /incorreto/);
 });
 
 test('fatura digitalizada aceita espaços na data e no valor e preserva o sinal', () => {

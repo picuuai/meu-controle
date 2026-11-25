@@ -1,17 +1,33 @@
 plugins { id 'com.android.application' version '8.7.3' }
+def signingPath = System.getenv('ANDROID_SIGNING_FILE')
+def signingPassword = System.getenv('ANDROID_SIGNING_PASSWORD')
 android {
     namespace 'br.meucontrole.cartoes'
     compileSdk 35
     defaultConfig {
-        applicationId 'br.meucontrole.cartoes'
+        applicationId 'br.meucontrole.app'
         minSdk 28
         targetSdk 34
-        versionCode 1
-        versionName '0.1'
+        versionCode = (System.getenv('ANDROID_VERSION_CODE') ?: '24').toInteger()
+        versionName = System.getenv('ANDROID_VERSION_NAME') ?: '24'
+    }
+    buildFeatures { buildConfig true }
+    if (signingPath && signingPassword) {
+        signingConfigs {
+            production {
+                storeFile file(signingPath)
+                storeType 'PKCS12'
+                storePassword signingPassword
+                keyAlias 'meu-controle'
+                keyPassword signingPassword
+            }
+        }
+        buildTypes.release.signingConfig = signingConfigs.production
     }
     sourceSets.main.assets.srcDirs = ['../../dist']
 }
 dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
     implementation 'androidx.core:core:1.15.0'
+    implementation 'com.journeyapps:zxing-android-embedded:4.3.0'
 }

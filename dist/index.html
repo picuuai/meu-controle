@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=23"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=24"><title>Meu Controle</title></head><body>
 <header><div class="brand"><span>▤</span> Meu Controle</div><label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label></header>
 <main>
 <section class="hero"><div><h1>Painel financeiro</h1><p>Faturas e parcelas dos seus cartões</p></div><div class="hero-actions"><button id="install-app" type="button" hidden>Instalar app</button><button id="add">+ Nova compra</button></div></section>
@@ -6,7 +6,9 @@
 <div><h2 id="notification-title">Alertas de compra</h2>
 <p id="native-status" role="status">Versão web. Para ler automaticamente os avisos bancários e as notificações de SMS, instale o APK do Android.</p></div>
 <button id="native" type="button" hidden>Ativar acesso às notificações</button>
-<a id="android-builds" href="https://github.com/picuuai/meu-controle/actions/workflows/android.yml">Ver versões para Android</a>
+<a id="android-builds" href="./meu-controle-android.apk">Baixar APK do Android</a>
+<div id="android-update" hidden><button id="check-update" type="button">Verificar atualização</button>
+<button id="get-update" type="button" hidden>Baixar atualização</button><p id="update-status" role="status"></p></div>
 </section>
 <div class="filters"><label>Mês da fatura <input id="month" type="month"></label><label>Cartão <select id="filter"><option value="">Todos</option><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label><label>Categoria <select id="category-filter"><option value="">Todas</option></select></label></div>
 <section class="metrics" aria-label="Resumo da fatura"><article><span id="total-caption">Total da fatura registrada</span><strong id="total"></strong></article><article><div><span id="next-month-caption">Próxima fatura</span><small id="later-total"></small></div><strong id="future"></strong></article><article><span>Parcelamentos pendentes</span><strong id="pending"></strong></article></section>
@@ -30,16 +32,22 @@
 </div>
 <div id="pdf-rows"></div>
 </section>
-<label>Texto do alerta <textarea id="notice" rows="3" placeholder="Cole o texto da compra"></textarea></label>
+<label>Texto do alerta <textarea id="notice" rows="3" placeholder="Cole um ou mais avisos de compra"></textarea></label>
 <button id="read">Revisar alerta</button>
-<p id="native-sms-help" hidden>Para revisar um SMS antigo, compartilhe-o no app Mensagens com o Meu Controle ou cole o texto acima.</p>
+<label class="file">Importar histórico SMS <small>Backup XML do 29194 ou TXT com os avisos de compra.</small>
+<input id="sms-file" type="file" accept=".xml,.txt,application/xml,text/xml,text/plain"></label>
+<p id="sms-status" role="status"></p>
+<p id="native-sms-help" hidden>As mensagens compartilhadas pelo app Mensagens aparecem na fila de revisão.</p>
 <div id="review"></div></section></div>
 <section class="panel"><details><summary>Sincronização com GitHub</summary>
 <form id="sync-form" autocomplete="off"><p>O token fica disponível enquanto esta página estiver aberta.</p>
 <label>Token do GitHub<input id="sync-token" type="password" autocomplete="off" spellcheck="false"></label>
 <button id="sync-button" type="submit">Sincronizar agora</button><p id="sync-status" role="status"></p></form>
+<button type="button" id="pair-create" hidden>Parear celular por QR</button>
+<button type="button" id="pair-scan" hidden>Ler QR do computador</button>
+<p id="pair-status" role="status"></p>
 </details></section></main>
-<dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><div class="pair"><label>Cartão<select name="bank"><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label><label>Categoria<select name="category"><option value="">Sem categoria</option></select></label></div><div class="pair"><label><span id="entry-date-label">Data da compra</span><input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
+<dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><div class="pair"><label>Cartão<select name="bank"><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label><label>Categoria<select name="category"><option value="">Sem categoria</option></select></label></div><div class="pair"><label><span id="entry-date-label">Data da compra</span><input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><button type="button" id="set-one-payment">À vista · 1 de 1</button><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
 <dialog id="install-help"><h2>Instalar Meu Controle</h2>
 <p>Abra <a href="./">o endereço do app</a> diretamente no navegador do aparelho.</p>
 <ul>
@@ -48,4 +56,15 @@
 <li><strong>Computador.</strong> No Chrome ou no Edge, procure a opção de instalar na barra de endereço ou no menu do navegador.</li>
 </ul>
 <form method="dialog" class="actions"><button type="submit">Fechar</button></form></dialog>
-<script type="module" src="./app.mjs?v=23"></script></body></html>
+<dialog id="pair-qr-dialog"><h2>Parear com o celular</h2>
+<p>Abra a sincronização no APK e toque em <strong>Ler QR do computador</strong>. Depois digite o código abaixo no celular.</p>
+<img id="pair-qr" alt="QR para parear o Meu Controle">
+<p id="pair-code"></p><p>Válido por quatro minutos.</p>
+<form method="dialog" class="actions"><button type="submit">Fechar</button></form></dialog>
+<dialog id="pair-pin-dialog"><form id="pair-pin-form"><h2>Confirmar pareamento</h2>
+<label>Código do computador<input id="pair-pin" type="password" inputmode="numeric" maxlength="12" autocomplete="off" required></label>
+<p id="pair-pin-status" role="status"></p>
+<div class="actions"><button id="pair-pin-close" type="button">Cancelar</button><button type="submit">Parear e sincronizar</button></div>
+</form></dialog>
+<script src="./qrcode.js" defer></script>
+<script type="module" src="./app.mjs?v=24"></script></body></html>

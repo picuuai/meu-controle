@@ -3,6 +3,8 @@ import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statemen
   statementReferenceMonth, monthAfter} from './ledger.mjs?v=21';
 import {mergeEntries, syncEntries} from './sync.mjs?v=13';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=21';
+import {parseSmsText, parseSmsBackup, smsKey} from './sms.mjs?v=24';
+import {createPairing, readPairing} from './pairing.mjs?v=24';
 
 const $ = id => document.getElementById(id);
 const money = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -129,7 +131,8 @@ function review(refreshPdf = true) {
   for (const item of queue.filter(item => item.source !== 'pdf')) {
     const button = document.createElement('button');
     button.className = 'entry';
-    button.textContent = item.name + ' · ' + (item.cents == null ? 'Valor pendente' : brl(item.cents));
+    button.textContent = item.name + ' · ' + (item.cents == null ? 'Valor pendente' : brl(item.cents)) +
+      (item.date ? ' · ' + item.date.split('-').reverse().join('/') : '') + ' · ' + paymentLabel(item);
     button.onclick = () => edit(item);
     $('review').append(button);
   }
@@ -313,8 +316,16 @@ function updateMatch() {
 }
 
 form.oninput = event => {
+  if (event.target === fields.count && fields.count.value === '1') fields.part.value = '1';
   fields.part.setCustomValidity('');
   if (event.target.id !== 'merge') updateMatch();
+};
+
+$('set-one-payment').onclick = () => {
+  fields.count.value = '1';
+  fields.part.value = '1';
+  fields.part.setCustomValidity('');
+  updateMatch();
 };
 form.onsubmit = event => {
   event.preventDefault();
@@ -391,6 +402,62 @@ $('undo-delete').onclick = () => {
 };
 
 let syncToken = '';
+let scannedPairing;
+let pairingTimer;
+$('pair-create').hidden = Boolean(window.AndroidAlerts);
+$('pair-create').onclick = async () => {
+  const status = $('pair-status');
+  const input = $('sync-token');
+  const token = input.value.trim() || syncToken;
+  if (!token) {
+    status.textContent = 'Informe o token do GitHub antes de gerar o QR.';
+    input.focus();
+    return;
+  }
+  $('pair-create').disabled = true;
+  try {
+    const {code, pin} = await createPairing(token);
+    const qr = window.qrcode(0, 'M');
+    qr.addData(code);
+    qr.make();
+    $('pair-qr').src = qr.createDataURL(4, 16);
+    $('pair-code').textContent = pin.match(/.{4}/g).join(' ');
+    $('pair-qr-dialog').showModal();
+    clearTimeout(pairingTimer);
+    pairingTimer = setTimeout(() => $('pair-qr-dialog').close(), 4 * 60 * 1000);
+    status.textContent = '';
+  } catch {
+    status.textContent = 'Não foi possível gerar o QR de pareamento.';
+  } finally {
+    $('pair-create').disabled = false;
+  }
+};
+$('pair-qr-dialog').onclose = () => {
+  clearTimeout(pairingTimer);
+  $('pair-qr').removeAttribute('src');
+  $('pair-code').textContent = '';
+};
+$('pair-pin-close').onclick = () => $('pair-pin-dialog').close();
+$('pair-pin-dialog').onclose = () => {
+  scannedPairing = undefined;
+  $('pair-pin').value = '';
+  $('pair-pin-status').textContent = '';
+};
+$('pair-pin-form').onsubmit = async event => {
+  event.preventDefault();
+  const button = $('pair-pin-form').querySelector('button[type=submit]');
+  button.disabled = true;
+  try {
+    syncToken = await readPairing(scannedPairing, $('pair-pin').value.replace(/\s/g, ''));
+    $('pair-pin-dialog').close();
+    $('sync-token').value = '';
+    $('sync-form').requestSubmit();
+  } catch (error) {
+    $('pair-pin-status').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+};
 $('sync-form').onsubmit = async event => {
   event.preventDefault();
   const field = $('sync-token');
@@ -431,10 +498,58 @@ $('category-filter').onchange = render;
 $('search').oninput = render;
 $('add').onclick = () => edit({});
 $('close').onclick = () => $('editor').close();
+
+function queueSms(rows) {
+  const status = $('sms-status');
+  if (!rows.length) {
+    status.textContent = 'Nenhum SMS de compra da CAIXA reconhecido.';
+    return;
+  }
+  const prior = readEntries();
+  const seen = new Set([...prior, ...queue].filter(row =>
+    !row.deleted && row.source === 'alert' && row.bank === 'CAIXA' && row.date && Number.isSafeInteger(row.cents))
+    .map(smsKey));
+  let added = 0;
+  for (const row of rows) {
+    const key = smsKey(row);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    queue.push({...row, month:row.date.slice(0, 7), category:suggestCategory(row.name, prior), source:'alert'});
+    added++;
+  }
+  const skipped = rows.length - added;
+  status.textContent = added + ' SMS adicionados à revisão.' + (skipped ? ' ' + skipped + ' já estavam na fila ou gravados.' : '');
+  review(false);
+}
+
 $('read').onclick = () => {
   const text = $('notice').value.trim();
-  if (text) edit({...parseNotice(text, localDate),source:'alert'});
-  else $('notice').focus();
+  if (!text) { $('notice').focus(); return; }
+  const messages = parseSmsText(text, localDate);
+  if (messages.length > 1) {
+    queueSms(messages);
+    $('notice').value = '';
+    return;
+  }
+  edit({...parseNotice(text, localDate),source:'alert'});
+};
+
+$('sms-file').onchange = async () => {
+  const field = $('sms-file');
+  const file = field.files[0];
+  if (!file) return;
+  try {
+    if (file.size > 25_000_000 || !/\.(xml|txt)$/i.test(file.name)) {
+      $('sms-status').textContent = 'Escolha um backup SMS em XML ou um arquivo TXT até 25 MB.';
+      return;
+    }
+    const content = await file.text();
+    queueSms(/\.xml$/i.test(file.name) ? parseSmsBackup(content, localDate) : parseSmsText(content, localDate));
+  } catch {
+    $('sms-status').textContent = 'Não foi possível abrir o arquivo de histórico SMS.';
+  } finally {
+    field.value = '';
+  }
 };
 
 $('theme').value = localStorage.getItem('meu-controle-theme') || 'system';
@@ -572,6 +687,38 @@ if (window.AndroidAlerts) {
   $('android-builds').hidden = true;
   $('native').hidden = false;
   $('native').onclick = () => window.AndroidAlerts.openSettings();
+  if (window.AndroidAlerts.scanPairing) {
+    $('pair-scan').hidden = false;
+    $('pair-scan').onclick = () => window.AndroidAlerts.scanPairing();
+  }
+  if (window.AndroidAlerts.installedVersion) {
+    $('android-update').hidden = false;
+    let updateUrl;
+    const checkUpdate = async (silent = false) => {
+      const status = $('update-status');
+      if (!silent) status.textContent = 'Verificando…';
+      $('check-update').disabled = true;
+      try {
+        const response = await fetch('https://api.github.com/repos/picuuai/meu-controle/releases/latest', {cache:'no-store'});
+        if (!response.ok) throw new Error();
+        const release = await response.json();
+        const version = Number(release.tag_name?.match(/^android-(\d+)$/)?.[1]);
+        const asset = release.assets?.find(item => item.name === 'meu-controle-android.apk');
+        if (!Number.isSafeInteger(version) || !asset) throw new Error();
+        updateUrl = version > window.AndroidAlerts.installedVersion() ? asset.browser_download_url : undefined;
+        $('get-update').hidden = !updateUrl;
+        if (updateUrl) status.textContent = 'Nova versão do Android disponível.';
+        else if (!silent) status.textContent = 'O APK está atualizado.';
+      } catch {
+        if (!silent) status.textContent = 'Não foi possível verificar a versão agora.';
+      } finally {
+        $('check-update').disabled = false;
+      }
+    };
+    $('check-update').onclick = () => checkUpdate();
+    $('get-update').onclick = () => window.AndroidAlerts.downloadUpdate(updateUrl);
+    checkUpdate(true);
+  }
   const refresh = () => {
     const enabled = window.AndroidAlerts.enabled?.();
     const connected = enabled && (window.AndroidAlerts.connected?.() ?? true);
@@ -580,11 +727,19 @@ if (window.AndroidAlerts) {
       ? 'Acesso ativado. Alertas dos bancos e avisos de compra do SMS 29194 aparecem para revisão.'
       : enabled ? 'Acesso concedido. Aguardando conexão do Android.'
         : 'Acesso desativado. Autorize o Meu Controle nas configurações do Android.';
-    if (!$('editor').open) {
+    const shared = [];
+    for (let index = 0; index < 50; index++) {
       const message = window.AndroidAlerts.takeSharedMessage?.();
-      if (message) {
-        $('notice').value = message;
-        $('read').click();
+      if (!message) break;
+      shared.push(...parseSmsText(message, localDate));
+    }
+    if (shared.length) queueSms(shared);
+    if (!$('editor').open && !$('pair-pin-dialog').open) {
+      const code = window.AndroidAlerts.takePairingCode?.();
+      if (code) {
+        scannedPairing = code;
+        $('sync-form').closest('details').open = true;
+        $('pair-pin-dialog').showModal();
       }
     }
     const alerts = JSON.parse(window.AndroidAlerts.pending());

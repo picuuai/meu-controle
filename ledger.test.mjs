@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './dist/ledger.mjs';
-import {identifyStatementRows, importStatementRows, installmentCount} from './dist/ledger.mjs';
+import {identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate} from './dist/ledger.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -84,6 +84,37 @@ test('parcela listada na próxima fatura fica no mês seguinte e só é gravada 
   assert.equal(result.duplicates, 1);
   assert.equal(result.entries.filter(entry => forMonth(entry,'2026-12')).length,1);
   assert.equal(result.entries.reduce((total, entry) => total + (forMonth(entry,'2027-01')?.cents || 0),0),5000);
+});
+
+test('Itaú inclui o IOF sem data e projeta os valores da seção que bate com os subtotais', () => {
+  const controls = {};
+  const parsed = parseStatement([
+    '08/11 Loja 01/03 40,00',
+    '08/11 Loja 02/03 40,00',
+    '08/11 Loja 03/03 40,00',
+    'Repasse de IOF em R$ 0,85',
+    'Compras parceladas - próximas faturas',
+    '10/11 Outra loja 01/02 20,00',
+    'Pr ó xima fatura 20,00',
+    'Total para pr ó ximas faturas 40,00'
+  ], '2026-11', 'Itaú', controls);
+  const rows = applyStatementForecast(parsed,'2026-11',controls);
+  assert.equal(rows.filter(row => row.billOnly).length, 3);
+  assert.equal(rows.find(row => row.dateIsReference).cents, 85);
+  assert.equal(rows.reduce((sum,row) => sum + (forMonth(row,'2026-11')?.cents || 0),0),12085);
+  assert.equal(rows.reduce((sum,row) => sum + futureTotal(row,'2026-11'),0),4000);
+  assert.equal(applyStatementForecast(parsed,'2026-11',{...controls,futureCents:5000}),parsed);
+});
+
+test('reconhece vencimento em linha separada e confirma a parcela prevista sem duplicá-la', () => {
+  const item = (str, x, y) => ({str, transform:[1,0,0,1,x,y]});
+  assert.equal(statementDueDate([item('VENCIMENTO',475,800),item('02/12/2026',485,780)]), '2026-12-02');
+  const [actual] = identifyStatementRows(parseStatement(['05/11 Loja 02/03 30,00'], '2026-12', 'Itaú'));
+  const projected = {...actual, id:'previsto', projection:true, updatedAt:1};
+  const result = importStatementRows([projected],[actual],()=>'novo',2,new Set([actual]));
+  assert.equal(result.updated,1);
+  assert.equal(result.entries.length,1);
+  assert.equal(result.entries[0].projection,false);
 });
 
 test('CAIXA mantém a parcela do demonstrativo no mês da fatura', () => {

@@ -43,11 +43,21 @@ main {padding-bottom: 28px}
 #save-pdf:disabled {opacity: .55; cursor: default}
 .pdf-billing-month {font-size: .9rem; margin: 12px 4px 5px; color: var(--muted)}
 #entry-status:empty {display: none}
-#delete-entry {color: #a33c31; margin-right: auto}
-html[data-theme=dark] #delete-entry {color: #ffaaa0}
+.danger-action {color: #a33c31; margin-right: auto}
+html[data-theme=dark] .danger-action {color: #ffaaa0}
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme]) #delete-entry {color: #ffaaa0}
+  html:not([data-theme]) .danger-action {color: #ffaaa0}
 }
 #pending-section {padding: 10px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 12px}
 #pending-section h3 {font-size: 1rem; margin: 0 0 8px}
 #pending-section .entry:last-child {margin-bottom: 0}
+
+.entry-card {border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 8px}
+.entry-card:last-child {margin-bottom: 0}
+.entry-card-header {display: flex; align-items: start; justify-content: space-between; gap: 12px}
+.entry-card-header span {min-width: 0; overflow-wrap: anywhere; font-weight: 700}
+.entry-card-header small {display: block; margin-top: 3px; font-weight: 500}
+.entry-card-header b {white-space: nowrap}
+.entry-card-actions {display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px}
+.entry-card-actions button {font-size: .88rem; min-height: 40px}
+.entry-card-actions .danger-action {margin: 0}

@@ -100,6 +100,18 @@ test('compra sem parcela no PDF é à vista e mantém a chave dos lançamentos a
   assert.equal(identifyStatementRows([row])[0].statementKey, identifyStatementRows([{...row, count:null}])[0].statementKey);
 });
 
+test('parcela incompleta mantém o número lido e o valor do mês sem projetar parcelas', () => {
+  const rows = parseStatement([
+    '04/11 Mercado 03 DE 15,90D',
+    '05/11 Outra loja 02 D E 04 20,00D',
+    '06/11 Exemplo 05/03 25,00D'
+  ], '2026-11', 'CAIXA');
+  assert.deepEqual(rows.map(row => [row.part, installmentCount(row)]), [[3,null],[2,4],[5,null]]);
+  assert.deepEqual(forMonth(rows[0], '2026-11'), {part:3,cents:1590});
+  assert.equal(forMonth(rows[0], '2026-12'), null);
+  assert.equal(futureTotal(rows[0], '2026-11'), 0);
+});
+
 test('fatura reconhece a parcela atual e projeta apenas as seguintes', () => {
   const [entry] = parseStatement(['21/12 Mercado 03/06 30,00','22/12 Pagamento da fatura -180,00'],'2026-01','Itaú');
   assert.equal(entry.date,'2025-12-21');

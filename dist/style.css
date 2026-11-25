@@ -48,3 +48,6 @@ html[data-theme=dark] #delete-entry {color: #ffaaa0}
 @media (prefers-color-scheme: dark) {
   html:not([data-theme]) #delete-entry {color: #ffaaa0}
 }
+#pending-section {padding: 10px; margin-bottom: 14px; border: 1px solid var(--line); border-radius: 12px}
+#pending-section h3 {font-size: 1rem; margin: 0 0 8px}
+#pending-section .entry:last-child {margin-bottom: 0}

@@ -12,6 +12,8 @@ export function parseNotice(text) {
 }
 
 const toCents = value => Math.round(Number(value.replaceAll('.', '').replace(',', '.')) * 100);
+const forecastHeading = /^compras\s+parceladas\b(?:\s*[-–—]\s*pr|.*\bpr[oó]ximas faturas\b)/i;
+const forecastEnd = /^(?:pr[oó]xima fatura|demais faturas|total para pr[oó]ximas faturas)\b/i;
 
 export function statementTextRows(items, pageWidth, bank) {
   const rows = [];
@@ -29,10 +31,14 @@ export function statementTextRows(items, pageWidth, bank) {
   if (!layout) return rows.map(row => row.words.sort((a, b) => a.x - b.x).map(word => word.text).join(' '));
 
   const lines = [];
+  const forecast = [false, false];
   for (const {words} of rows) {
     words.sort((a, b) => a.x - b.x);
     for (const column of [0, 1]) {
       const region = words.filter(word => Number(word.x / pageWidth >= layout.split) === column);
+      const label = region.map(word => word.text).join(' ');
+      if (forecastHeading.test(label)) forecast[column] = true;
+      else if (forecastEnd.test(label)) forecast[column] = false;
       const dateIndex = region.findIndex(word =>
         /^\d{2}\s*\/\s*\d{2}(?!\d)/.test(word.text) && Math.abs(word.x / pageWidth - layout.dates[column]) < .028);
       if (dateIndex < 0) continue;
@@ -44,22 +50,29 @@ export function statementTextRows(items, pageWidth, bank) {
       const description = region.slice(dateIndex, amountIndex).filter(word =>
         !layout.cities || word.x / pageWidth < layout.cities[column]);
       const amount = region.slice(amountIndex, end);
-      lines.push([...description, ...amount].map(word => word.text).join(' '));
+      const text = [...description, ...amount].map(word => word.text).join(' ');
+      lines.push(forecast[column] ? {text, nextBill: true} : text);
     }
   }
   return lines;
 }
 
 export function parseStatement(lines, month, bank) {
+  let forecast = false;
   return lines.flatMap(line => {
-    const row = line.match(/^\s*(\d{2})\s*\/\s*(\d{2})(?:\s*\/\s*(\d{4}|\d{2}))?(?:\s+|(?=[\p{L}*]))(.+?)\s+(?:R\s*\$\s*)?([-−]?\s*[\d.]+,\s*\d{2})\s*([CD])?\s*$/iu);
+    const text = typeof line === 'string' ? line : line.text;
+    if (forecastHeading.test(text)) { forecast = true; return []; }
+    if (forecastEnd.test(text)) { forecast = false; return []; }
+    const nextBill = forecast || line.nextBill === true;
+    const row = text.match(/^\s*(\d{2})\s*\/\s*(\d{2})(?:\s*\/\s*(\d{4}|\d{2}))?(?:\s+|(?=[\p{L}*]))(.+?)\s+(?:R\s*\$\s*)?([-−]?\s*[\d.]+,\s*\d{2})\s*([CD])?\s*$/iu);
     if (!row) return [];
     const [,day, dateMonth, year, description, value, direction] = row;
-    if (/pagto\.?|pagamento (?:de|da|efetuado)|saldo anterior|total da fatura/i.test(description)) return [];
-    const marker = description.match(/(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})\s*\/\s*(\d{1,3})\s*$/i);
+    if (/pagto\b|pagamento (?:de|da|efetuado|via conta)|obrigado pelo pagamento|saldo anterior|total da fatura/i.test(description)) return [];
+    const marker = description.match(installmentMarker);
     const part = Number(marker?.[1]) || 1;
     const count = Number(marker?.[2]) || null;
     if (count && (part > count || count > 120)) return [];
+    if (nextBill && !count) return [];
     const inferredYear = Number(month.slice(0,4)) - Number(dateMonth > month.slice(5));
     const date = (year?.length === 2 ? '20' + year : year || inferredYear) + '-' + dateMonth + '-' + day;
     const parsed = new Date(date + 'T00:00Z');
@@ -67,7 +80,9 @@ export function parseStatement(lines, month, bank) {
     const name = (marker ? description.slice(0, marker.index) : description).trim();
     const amount = toCents(value.replaceAll(/\s/g, '').replace('−', '-'));
     const cents = direction?.toUpperCase() === 'C' ? -Math.abs(amount) : amount;
-    return name ? [{name, date, bank, month, cents, count, part, source:'pdf', statementValue:true}] : [];
+    const billingMonth = nextBill ? monthAfter(month) : month;
+    return name ? [{name, date, bank, month:billingMonth, cents, count: count || 1, part, source:'pdf', statementValue:true,
+      ...(nextBill && {projection:true})}] : [];
   });
 }
 
@@ -79,6 +94,17 @@ export function charge(entry, part) {
 }
 
 const monthNumber = month => Number(month.slice(0,4)) * 12 + Number(month.slice(5)) - 1;
+const installmentMarker = /(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})(?:\s*\/\s*|\s+de\s+)(\d{1,3})\s*$/i;
+
+export function installmentCount(entry) {
+  if (entry.count) return entry.count;
+  return entry.source === 'pdf' && !/(?:\b\d{1,3}\s+de\s*(?:\d{1,3})?|\b\d{1,3}\s*\/\s*\d{1,3})$/i.test(entry.name) ? 1 : null;
+}
+
+function monthAfter(month) {
+  const number = monthNumber(month) + 1;
+  return Math.floor(number / 12) + '-' + String(number % 12 + 1).padStart(2, '0');
+}
 
 export function forMonth(entry, month) {
   const part = entry.part + monthNumber(month) - monthNumber(entry.month);
@@ -94,13 +120,14 @@ export function futureTotal(entry, month) {
   return cents;
 }
 
-const normalized = value => value.normalize('NFD').replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const normalized = value => value.replace(installmentMarker, '').normalize('NFD')
+  .replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 
 export function candidates(entries, incoming) {
   const name = normalized(incoming.name);
   if (!name || name === 'compradocartao') return [];
   return entries.filter(entry => {
-    if (entry.bank !== incoming.bank || entry.date !== incoming.date || normalized(entry.name) !== name) return false;
+    if (entry.deleted || entry.bank !== incoming.bank || entry.date !== incoming.date || normalized(entry.name) !== name) return false;
     const existing = forMonth(entry, incoming.month);
     return existing?.cents === incoming.cents ||
       (incoming.count && !entry.count && Math.abs(entry.cents - incoming.count * incoming.cents) <= incoming.count);
@@ -110,28 +137,35 @@ export function candidates(entries, incoming) {
 export function identifyStatementRows(rows) {
   const occurrences = new Map();
   return rows.map(row => {
-    const signature = JSON.stringify([row.bank, row.month, row.date, normalized(row.name), row.cents, row.part, row.count]);
+    const signature = JSON.stringify([row.bank, row.month, row.date, normalized(row.name), row.cents, row.part,
+      row.count === 1 ? null : row.count]);
     const occurrence = (occurrences.get(signature) || 0) + 1;
     occurrences.set(signature, occurrence);
     return {...row, statementKey: signature + ':' + occurrence};
   });
 }
 
-export function importStatementRows(entries, rows, createId, now, selected = new Set(rows)) {
+export function importStatementRows(entries, rows, createId, now, selected) {
+  const preview = selected === undefined;
+  selected ??= new Set(rows);
   const saved = new Map(entries.map(entry => [entry.id, entry]));
   const knownKeys = new Set(entries.map(entry => entry.statementKey).filter(Boolean));
-  const used = new Set();
+  const usedByMonth = new Map();
   const pending = [];
   let added = 0;
   let updated = 0;
   const alreadyRecorded = new Set();
-  for (const row of rows) {
+  const ordered = [...rows].sort((a, b) => Number(Boolean(a.projection)) - Number(Boolean(b.projection)));
+  for (const row of ordered) {
     if (knownKeys.has(row.statementKey)) {
       if (selected.has(row)) alreadyRecorded.add(row);
       continue;
     }
+    if (!usedByMonth.has(row.month)) usedByMonth.set(row.month, new Set());
+    const used = usedByMonth.get(row.month);
     const signature = row.statementKey.slice(0, row.statementKey.lastIndexOf(':') + 1);
-    const matches = candidates(entries, row).filter(entry =>
+    const source = row.projection && !preview ? [...saved.values()] : entries;
+    const matches = candidates(source, row).filter(entry =>
       !used.has(entry.id) && !entry.statementKey?.startsWith(signature));
     if (matches.length > 1) {
       if (selected.has(row)) pending.push(row);
@@ -147,7 +181,8 @@ export function importStatementRows(entries, rows, createId, now, selected = new
       continue;
     }
     const bill = forMonth(existing, row.month);
-    if ((existing.statementValue && !row.count) ||
+    if ((row.count === 1 && bill?.cents === row.cents) ||
+        (existing.statementValue && !row.count) ||
         (row.count && existing.count === row.count && bill?.part === row.part && bill.cents === row.cents)) {
       alreadyRecorded.add(row);
       continue;

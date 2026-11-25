@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './dist/ledger.mjs';
-import {identifyStatementRows, importStatementRows} from './dist/ledger.mjs';
+import {identifyStatementRows, importStatementRows, installmentCount} from './dist/ledger.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -66,6 +66,38 @@ test('lote concilia uma compra confirmada e deixa conflitos para revisão', () =
   const ambiguous = importStatementRows([notice, {...notice, id:'outro'}], rows, () => 'novo', 1);
   assert.equal(ambiguous.pending.length, 1);
   assert.equal(ambiguous.entries.length, 2);
+});
+
+test('parcela listada na próxima fatura fica no mês seguinte e só é gravada se ainda não estiver projetada', () => {
+  const parsed = parseStatement([
+    '05/12 Loja 01/03 30,00',
+    'Compras parceladas - próximas faturas',
+    '05/12 Loja 02/03 30,00',
+    '08/12 Outra loja 01/02 20,00',
+    'Próxima fatura 50,00'
+  ], '2026-12', 'Itaú');
+  assert.deepEqual(parsed.map(({month, part}) => [month, part]), [['2026-12',1],['2027-01',2],['2027-01',1]]);
+  const rows = identifyStatementRows(parsed);
+  let id = 0;
+  const result = importStatementRows([], rows, () => String(++id), 1, new Set(rows));
+  assert.equal(result.added, 2);
+  assert.equal(result.duplicates, 1);
+  assert.equal(result.entries.filter(entry => forMonth(entry,'2026-12')).length,1);
+  assert.equal(result.entries.reduce((total, entry) => total + (forMonth(entry,'2027-01')?.cents || 0),0),5000);
+});
+
+test('CAIXA mantém a parcela do demonstrativo no mês da fatura', () => {
+  const [entry] = parseStatement(['04/11 Mercado 02 DE 04 15,90D','05/11 OBRIGADO PELO PAGAMENTO 40,00C'], '2026-11', 'CAIXA');
+  assert.deepEqual([entry.name, entry.month, entry.part, entry.count], ['Mercado','2026-11',2,4]);
+});
+
+test('compra sem parcela no PDF é à vista e mantém a chave dos lançamentos antigos', () => {
+  const [row] = parseStatement(['04/11 Mercado 15,90D'], '2026-11', 'CAIXA');
+  assert.equal(row.count, 1);
+  assert.equal(installmentCount({...row, count:null}), 1);
+  assert.equal(installmentCount({...row, count:null, name:'Mercado 02 DE 04'}), null);
+  assert.equal(installmentCount({source:'alert', name:'Mercado', count:null}), null);
+  assert.equal(identifyStatementRows([row])[0].statementKey, identifyStatementRows([{...row, count:null}])[0].statementKey);
 });
 
 test('fatura reconhece a parcela atual e projeta apenas as seguintes', () => {

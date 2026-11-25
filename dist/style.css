@@ -86,3 +86,67 @@ html[data-theme=dark] .danger-action {color: #ffaaa0}
 #pair-code {text-align: center; font-size: 1.2rem; font-weight: 750; letter-spacing: .04em}
 #android-update {flex: 0 0 100%}
 #android-update p:empty {display: none}
+
+[hidden] {display: none !important}
+.app-header {padding: 16px 0 12px}
+.app-header .brand {display: inline-flex; align-items: center; gap: 9px; color: var(--ink); text-decoration: none}
+.app-header .brand img {border-radius: 8px}
+.settings-link {color: var(--muted); font-size: .9rem; font-weight: 650; padding-block: 8px}
+.settings-link[aria-current=page] {color: var(--ink); text-decoration-thickness: 2px}
+.app-nav {display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 4px; margin-bottom: 16px; background: var(--paper); border: 1px solid var(--line); border-radius: 13px}
+.app-nav a {min-width: 0; display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 42px; padding: 4px; border-radius: 9px; color: var(--muted); text-decoration: none; font-size: clamp(.75rem, 2.9vw, .95rem); font-weight: 720}
+.app-nav a[aria-current=page] {background: var(--green); color: #fff}
+#nav-alert-count {padding: 1px 5px; background: var(--accent); color: #122b24; border-radius: 9px; font-size: .7rem}
+#app-filters {margin-block: 14px 18px}
+#app-filters label {max-width: 330px}
+.hero {background: linear-gradient(135deg,#122b24 25%,#244d3f); padding: clamp(20px, 4vw, 40px); border-radius: 20px}
+.hero h1 {font-size: clamp(2.05rem, 5vw, 3.6rem)}
+.hero p {text-transform: capitalize; font-size: 1rem}
+.metrics .metric {min-width: 0}
+.metric-featured {background: var(--accent); border-color: transparent; color: #132b23}
+.metric-featured span {color: #2c5041}
+.quick-links, .bill-cards {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-block: 14px}
+.quick-links a {display: grid; gap: 5px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); color: var(--ink); text-decoration: none}
+.quick-links a:hover, .quick-links a:focus-visible {border-color: #278567}
+.quick-links small {line-height: 1.35}
+.analytics {grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start}
+.analytics-cards {grid-column: 1 / -1}
+.analytics-cards .chart {grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px}
+.chart .chart-filter {border: 0; border-radius: 4px; min-height: 0; text-align: left; padding: 2px 0; font-size: inherit; font-weight: 650; overflow-wrap: anywhere}
+.chart .chart-filter:hover, .chart .chart-filter:focus-visible {text-decoration: underline}
+.chart-track .debit-bar, .trend-bar {background: linear-gradient(110deg,#258061,#4bb18c)}
+.trend {list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px}
+.trend-month {display: grid; grid-template-rows: 140px auto; gap: 7px; width: 100%; padding: 6px 3px; font-size: .75rem; color: var(--muted); border: 1px solid transparent}
+.trend-month[aria-pressed=true] {border-color: var(--line); color: var(--ink); background: var(--bg)}
+.trend-track {position: relative; display: block; width: 100%; background: repeating-linear-gradient(to top,transparent 0,transparent calc(25% - 1px),var(--line) calc(25% - 1px),var(--line) 25%)}
+.trend-track::after {content: ''; position: absolute; bottom: var(--baseline); inset-inline: 0; border-top: 1px solid var(--line)}
+.trend-bar {position: absolute; left: 20%; width: 60%; border-radius: 5px 5px 2px 2px}
+.trend-bar.credit-bar {background: #aa6638; border-radius: 2px 2px 5px 5px}
+.view-header {display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-block: 18px}
+.view-header h1 {margin: 0; font-size: clamp(1.8rem, 5vw, 2.65rem)}
+#add-entry {background: var(--accent); color: #122b24; border-color: transparent}
+.entry-filters {display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px}
+.list-status {color: var(--muted); margin-block: 0 12px; font-size: .9rem}
+.pagination {display: flex; justify-content: space-between; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line)}
+.pagination button:disabled {opacity: .5; cursor: default}
+.bill-card {background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 16px; display: grid; gap: 6px}
+.bill-card h2 {font-size: 1rem; margin: 0}
+.bill-card strong {font-size: clamp(1.1rem, 4vw, 1.55rem); font-variant-numeric: tabular-nums}
+.bill-card button {justify-self: start; margin-top: 5px}
+.import-panel, .alert-queue, .settings-sync {margin-top: 14px}
+.import-panel > label, .settings-sync form {max-width: 520px}
+.settings-sync summary {font-weight: 720; cursor: pointer}
+.settings-appearance .theme {justify-content: start}
+@media (max-width: 700px) {
+  .analytics {grid-template-columns: minmax(0, 1fr)}
+  .analytics-cards .chart {grid-template-columns: minmax(0, 1fr); gap: 10px}
+  .quick-links {gap: 8px}
+  .quick-links a {padding: 10px; font-size: .86rem}
+}
+@media (max-width: 520px) {
+  .entry-filters, .bill-cards {grid-template-columns: minmax(0, 1fr)}
+  .view-header h1 {letter-spacing: -.045em}
+  .trend-month {grid-template-rows: 110px auto}
+  .quick-links {grid-template-columns: minmax(0, 1fr)}
+  .quick-links a {grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: center}
+}

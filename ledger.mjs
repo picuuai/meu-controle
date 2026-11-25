@@ -117,38 +117,39 @@ export function identifyStatementRows(rows) {
   });
 }
 
-export function importStatementRows(entries, rows, createId, now) {
+export function importStatementRows(entries, rows, createId, now, selected = new Set(rows)) {
   const saved = new Map(entries.map(entry => [entry.id, entry]));
   const knownKeys = new Set(entries.map(entry => entry.statementKey).filter(Boolean));
   const used = new Set();
   const pending = [];
   let added = 0;
   let updated = 0;
-  let duplicates = 0;
+  const alreadyRecorded = new Set();
   for (const row of rows) {
     if (knownKeys.has(row.statementKey)) {
-      duplicates++;
+      if (selected.has(row)) alreadyRecorded.add(row);
       continue;
     }
     const signature = row.statementKey.slice(0, row.statementKey.lastIndexOf(':') + 1);
     const matches = candidates(entries, row).filter(entry =>
       !used.has(entry.id) && !entry.statementKey?.startsWith(signature));
     if (matches.length > 1) {
-      pending.push(row);
+      if (selected.has(row)) pending.push(row);
       continue;
     }
     const existing = matches[0];
+    if (existing) used.add(existing.id);
+    if (!selected.has(row)) continue;
     if (!existing) {
       const id = createId();
       saved.set(id, {...row, id, updatedAt: now});
       added++;
       continue;
     }
-    used.add(existing.id);
     const bill = forMonth(existing, row.month);
     if ((existing.statementValue && !row.count) ||
         (row.count && existing.count === row.count && bill?.part === row.part && bill.cents === row.cents)) {
-      duplicates++;
+      alreadyRecorded.add(row);
       continue;
     }
     if (existing.statementValue && existing.count) {
@@ -156,12 +157,12 @@ export function importStatementRows(entries, rows, createId, now) {
       continue;
     }
     if (!row.count) {
-      duplicates++;
+      alreadyRecorded.add(row);
       continue;
     }
     saved.set(existing.id, {...existing, ...row, category: existing.category || row.category,
       updatedAt: Math.max(now, (existing.updatedAt || 0) + 1)});
     updated++;
   }
-  return {entries: [...saved.values()], added, updated, duplicates, pending};
+  return {entries: [...saved.values()], added, updated, duplicates: alreadyRecorded.size, alreadyRecorded, pending};
 }

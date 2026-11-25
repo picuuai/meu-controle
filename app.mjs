@@ -1,5 +1,5 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
-  identifyStatementRows, importStatementRows} from './ledger.mjs?v=10';
+  identifyStatementRows, importStatementRows} from './ledger.mjs?v=11';
 import {mergeEntries, syncEntries} from './sync.mjs';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
@@ -14,6 +14,7 @@ const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
 let entries = readEntries();
 let queue = [];
 const selectedPdf = new Set();
+let statementRows = [];
 let editing;
 let initialCategory;
 
@@ -136,7 +137,7 @@ function review(refreshPdf = true) {
 $('save-pdf').onclick = () => {
   const rows = queue.filter(item => selectedPdf.has(item));
   if (!rows.length) return;
-  const result = importStatementRows(readEntries(), rows, () => crypto.randomUUID(), Date.now());
+  const result = importStatementRows(readEntries(), statementRows, () => crypto.randomUUID(), Date.now(), selectedPdf);
   try {localStorage.setItem(storageKey, JSON.stringify(result.entries));}
   catch { $('status').textContent = 'Falha ao salvar no aparelho. A seleção foi preservada.'; return; }
   entries = result.entries;
@@ -359,14 +360,22 @@ async function importPdf(files) {
       }
     }
     const imported = identifyStatementRows(parsed).map(row => ({...row, category: suggestCategory(row.name)}));
+    statementRows = imported;
+    const {alreadyRecorded} = importStatementRows(readEntries(), imported, () => Symbol(), 0);
+    const remaining = imported.filter(row => !alreadyRecorded.has(row));
     selectedPdf.clear();
-    for (const row of imported) selectedPdf.add(row);
-    queue = [...queue.filter(entry => entry.source !== 'pdf'),...imported];
+    for (const row of remaining) selectedPdf.add(row);
+    queue = [...queue.filter(entry => entry.source !== 'pdf'),...remaining];
     review();
-    status.textContent = parsed.length
-      ? parsed.length + ' lançamentos encontrados em ' + file.name + '.' +
-        (ocr ? ' Confira os dados reconhecidos.' : ' Revise a seleção.') + ' Depois, toque em Lançar selecionados.'
-      : 'Nenhum lançamento reconhecido no PDF. Confira se o arquivo contém a lista de compras e se o texto está legível.';
+    if (!imported.length) {
+      status.textContent = 'Nenhum lançamento reconhecido no PDF. Confira se o arquivo contém a lista de compras e se o texto está legível.';
+    } else if (!remaining.length) {
+      status.textContent = 'Todos os ' + imported.length + ' lançamentos reconhecidos nesta fatura já estão registrados.';
+    } else {
+      const skipped = alreadyRecorded.size ? ' ' + alreadyRecorded.size + ' já registrados foram ocultados.' : '';
+      status.textContent = remaining.length + ' para lançar ou revisar em ' + file.name + '.' + skipped +
+        (ocr ? ' Confira os dados reconhecidos.' : '') + ' Depois, toque em Lançar selecionados.';
+    }
   } catch (error) {
     console.warn('Falha ao importar fatura', error.name);
     status.textContent = canceled ? 'Importação cancelada.' : error.name === 'InvalidPDFException'

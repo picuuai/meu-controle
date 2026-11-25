@@ -81,3 +81,8 @@ html[data-theme=dark] .danger-action {color: #ffaaa0}
 .notification-panel h2 {margin: 0 0 5px; font-size: 1.05rem}
 .notification-panel #native-status, .notification-panel > button {margin: 0}
 .notification-panel a {color: var(--ink); font-size: .9rem; font-weight: 700}
+
+#pair-qr {display: block; width: min(100%, 280px); margin: 12px auto; image-rendering: pixelated}
+#pair-code {text-align: center; font-size: 1.2rem; font-weight: 750; letter-spacing: .04em}
+#android-update {flex: 0 0 100%}
+#android-update p:empty {display: none}

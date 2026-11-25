@@ -25,7 +25,7 @@ function forecastControl(text) {
   return null;
 }
 
-export function statementDueDate(items) {
+function statementDate(items, labelPattern) {
   const format = /\b(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})\b/;
   const dates = new Map();
   const add = match => {
@@ -38,7 +38,7 @@ export function statementDueDate(items) {
   };
   for (const item of items) {
     const label = item.str?.trim() || '';
-    if (!/^vencimento\s*:?($|\s*\d)/i.test(label)) continue;
+    if (!labelPattern.test(label)) continue;
     const inline = label.match(format);
     if (inline) {
       add(inline);
@@ -46,6 +46,13 @@ export function statementDueDate(items) {
     }
     const x = item.transform[4];
     const y = item.transform[5];
+    const adjacent = items.filter(other => other !== item && other.transform[4] >= x &&
+      other.transform[4] <= x + 96 && Math.abs(other.transform[5] - y) < 1)
+      .map(other => other.str?.match(format)?.[0]).filter(Boolean);
+    if (new Set(adjacent).size === 1) {
+      add(adjacent[0].match(format));
+      continue;
+    }
     const nearby = items.filter(other => other !== item && /^\s*\d/.test(other.str || '') &&
       other.transform[4] >= x - 4 && other.transform[4] <= x + 96 &&
       other.transform[5] <= y + 2 && other.transform[5] >= y - 24);
@@ -56,7 +63,18 @@ export function statementDueDate(items) {
   return ordered.length && ordered[0][1] !== ordered[1]?.[1] ? ordered[0][0] : null;
 }
 
-export function statementTextRows(items, pageWidth, bank) {
+export function statementDueDate(items) {
+  return statementDate(items, /^vencimento\s*:?($|\s*\d)/i);
+}
+
+export function statementReferenceMonth(items, bank, selectedMonth, dueDate) {
+  if (bank !== 'Itaú') return dueDate?.slice(0, 7) || selectedMonth;
+  const closing = statementDate(items, /^(?:data (?:do |de ))?fechamento\s*:?($|\s*\d)/i) ||
+    statementDate(items, /^emiss(?:[aã]o\s*:?|$)/i);
+  return closing && (!dueDate || closing <= dueDate) ? closing.slice(0, 7) : selectedMonth;
+}
+
+export function statementTextRows(items, pageWidth, bank, section = {}) {
   const rows = [];
   for (const item of items) {
     if (!item.str?.trim()) continue;
@@ -72,7 +90,7 @@ export function statementTextRows(items, pageWidth, bank) {
   if (!layout) return rows.map(row => row.words.sort((a, b) => a.x - b.x).map(word => word.text).join(' '));
 
   const lines = [];
-  const forecast = [false, false];
+  const forecast = [Boolean(section.nextBill), false];
   for (const {words} of rows) {
     words.sort((a, b) => a.x - b.x);
     for (const column of [0, 1]) {
@@ -105,6 +123,7 @@ export function statementTextRows(items, pageWidth, bank) {
       lines.push(forecast[column] ? {text, nextBill: true} : text);
     }
   }
+  section.nextBill = forecast.some(Boolean);
   return lines;
 }
 

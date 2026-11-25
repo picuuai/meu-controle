@@ -1,6 +1,6 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
-  identifyStatementRows, importStatementRows} from './ledger.mjs?v=11';
-import {mergeEntries, syncEntries} from './sync.mjs';
+  identifyStatementRows, importStatementRows, installmentCount} from './ledger.mjs?v=13';
+import {mergeEntries, syncEntries} from './sync.mjs?v=13';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
 const $ = id => document.getElementById(id);
@@ -17,9 +17,16 @@ const selectedPdf = new Set();
 let statementRows = [];
 let editing;
 let initialCategory;
+let lastDeletion;
 
 for (const category of categories) fields.category.add(new Option(category, category));
 for (const category of [...categories, uncategorized]) $('category-filter').add(new Option(category, category));
+
+function paymentLabel(entry, part = entry.part) {
+  const count = installmentCount(entry);
+  if (!count) return 'Parcelamento pendente';
+  return count === 1 ? 'À vista' : part + '/' + count;
+}
 
 function drawBars(id, series) {
   const chart = $(id);
@@ -56,12 +63,12 @@ function render() {
   const card = $('filter').value;
   const category = $('category-filter').value;
   const selected = entries.filter(entry =>
-    (!card || entry.bank === card) && (!category || categoryOf(entry) === category));
+    !entry.deleted && (!card || entry.bank === card) && (!category || categoryOf(entry) === category));
   const visible = selected.map(entry => ({entry, bill:forMonth(entry,month)})).filter(row => row.bill);
   visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
   $('total').textContent = brl(visible.reduce((sum,row) => sum + row.bill.cents,0));
   $('future').textContent = brl(selected.reduce((sum,entry) => sum + futureTotal(entry,month),0));
-  $('pending').textContent = visible.filter(({entry}) => !entry.count).length;
+  $('pending').textContent = visible.filter(({entry}) => !installmentCount(entry)).length;
   drawBars('category-chart', groupCharges(visible, categoryOf));
   drawBars('card-chart', groupCharges(visible, entry => entry.bank));
   drawBars('monthly-chart', monthlyCharges(selected, month));
@@ -75,7 +82,7 @@ function render() {
     const detail = document.createElement('span');
     detail.textContent = entry.name;
     const subtitle = document.createElement('small');
-    subtitle.textContent = [categoryOf(entry), entry.bank, entry.date.split('-').reverse().join('/'), entry.count ? bill.part + '/' + entry.count : 'Parcelamento pendente'].join(' · ');
+    subtitle.textContent = [categoryOf(entry), entry.bank, entry.date.split('-').reverse().join('/'), paymentLabel(entry, bill.part)].join(' · ');
     detail.append(subtitle);
     const value = document.createElement('b');
     value.textContent = brl(bill.cents);
@@ -96,7 +103,7 @@ function review(refreshPdf = true) {
   }
   if (!refreshPdf) return;
   $('pdf-rows').replaceChildren();
-  const pdfRows = queue.filter(item => item.source === 'pdf');
+  const pdfRows = queue.filter(item => item.source === 'pdf').sort((a, b) => a.month.localeCompare(b.month));
   $('pdf-review').hidden = !pdfRows.length;
   const selectionChanged = () => {
     const total = pdfRows.filter(item => selectedPdf.has(item)).length;
@@ -112,10 +119,18 @@ function review(refreshPdf = true) {
     }
     review();
   };
+  let billingMonth;
   for (const item of pdfRows) {
+    if (billingMonth !== item.month) {
+      billingMonth = item.month;
+      const heading = document.createElement('h3');
+      heading.className = 'pdf-billing-month';
+      heading.textContent = (item.projection ? 'Próxima fatura' : 'Fatura do mês') + ' · ' + billingMonth.split('-').reverse().join('/');
+      $('pdf-rows').append(heading);
+    }
     const button = document.createElement('button');
     button.className = 'entry';
-    button.textContent = item.date.split('-').reverse().join('/') + ' · ' + item.name + ' · ' + brl(item.cents);
+    button.textContent = item.date.split('-').reverse().join('/') + ' · ' + item.name + ' · ' + brl(item.cents) + ' · ' + paymentLabel(item);
     button.onclick = () => edit(item);
     const row = document.createElement('div');
     row.className = 'pdf-row';
@@ -144,7 +159,7 @@ $('save-pdf').onclick = () => {
   const pending = new Set(result.pending);
   queue = queue.filter(item => !selectedPdf.has(item) || pending.has(item));
   selectedPdf.clear();
-  $('month').value = rows[0].month;
+  $('month').value = rows.find(row => !row.projection)?.month || rows[0].month;
   $('filter').value = rows[0].bank;
   $('category-filter').value = '';
   $('search').value = '';
@@ -160,12 +175,13 @@ $('save-pdf').onclick = () => {
 
 function edit(entry) {
   editing = entry;
+  $('delete-entry').hidden = !entry.id;
   fields.name.value = entry.name || '';
   fields.bank.value = entry.bank || $('bank').value;
   fields.date.value = entry.date || localDate;
   fields.month.value = entry.month || $('month').value;
   fields.amount.value = entry.cents == null ? '' : (entry.cents/100).toFixed(2);
-  fields.count.value = entry.count ?? '';
+  fields.count.value = installmentCount(entry) ?? (entry.source === 'alert' || entry.id ? '' : 1);
   fields.part.value = entry.part || 1;
   initialCategory = entry.id ? entry.category || '' : suggestCategory(entry.name || '');
   fields.category.value = initialCategory;
@@ -214,6 +230,10 @@ form.onsubmit = event => {
   const previous = current.find(row => row.id === entry.id);
   entry.updatedAt = Math.max(Date.now(), (previous?.updatedAt || 0) + 1);
   if (existing?.category && entry.category === initialCategory) entry.category = existing.category;
+  if (previous?.deleted) {
+    $('match').textContent = 'Este lançamento foi excluído. Feche a edição para atualizar a lista.';
+    return;
+  }
   // Preserve the start of an already confirmed installment series.
   const saved = existing?.count && existing.statementValue && existing.part < entry.part && existing.count === entry.count && existing.cents === entry.cents
     ? {...existing, category:entry.category, updatedAt:entry.updatedAt} : entry;
@@ -228,6 +248,46 @@ form.onsubmit = event => {
   $('month').value = entry.month;
   render();
   review();
+};
+
+$('delete-entry').onclick = () => {
+  if (!editing?.id || !confirm('Excluir este lançamento e suas parcelas vinculadas?')) return;
+  const current = readEntries();
+  const entry = current.find(row => row.id === editing.id && !row.deleted);
+  if (!entry) {
+    $('match').textContent = 'Este lançamento já foi excluído.';
+    return;
+  }
+  const removed = {id: entry.id, deleted: true, updatedAt: Math.max(Date.now(), (entry.updatedAt || 0) + 1)};
+  const next = current.map(row => row.id === entry.id ? removed : row);
+  try {localStorage.setItem(storageKey, JSON.stringify(next));}
+  catch { $('match').textContent = 'Falha ao excluir no aparelho.'; return; }
+  lastDeletion = {entry, updatedAt: removed.updatedAt};
+  entries = next;
+  $('editor').close();
+  $('entry-status').textContent = 'Lançamento excluído.';
+  $('undo-delete').hidden = false;
+  render();
+};
+
+$('undo-delete').onclick = () => {
+  if (!lastDeletion) return;
+  const {entry, updatedAt} = lastDeletion;
+  const current = readEntries();
+  if (!current.some(row => row.id === entry.id && row.deleted && row.updatedAt === updatedAt)) {
+    $('entry-status').textContent = 'O lançamento já foi alterado em outra sessão.';
+    $('undo-delete').hidden = true;
+    return;
+  }
+  const restored = {...entry, updatedAt: Math.max(Date.now(), updatedAt + 1)};
+  const next = current.map(row => row.id === entry.id ? restored : row);
+  try {localStorage.setItem(storageKey, JSON.stringify(next));}
+  catch { $('entry-status').textContent = 'Falha ao desfazer a exclusão.'; return; }
+  entries = next;
+  lastDeletion = undefined;
+  $('entry-status').textContent = 'Lançamento restaurado.';
+  $('undo-delete').hidden = true;
+  render();
 };
 
 let syncToken = '';

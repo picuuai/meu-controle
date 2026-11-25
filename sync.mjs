@@ -43,8 +43,10 @@ export async function syncEntries(token, readLocal) {
     const bytes = Uint8Array.from(atob(stored.content), character => character.charCodeAt(0));
     const data = JSON.parse(new TextDecoder().decode(bytes));
     if (data.version !== 1 || !Array.isArray(data.entries) ||
-        data.entries.some(entry => !entry || typeof entry.id !== 'string' || typeof entry.date !== 'string' ||
-          typeof entry.name !== 'string' || typeof entry.month !== 'string' || !Number.isSafeInteger(entry.cents))) {
+        data.entries.some(entry => !entry || typeof entry.id !== 'string' || (entry.deleted === true
+          ? !Number.isSafeInteger(entry.updatedAt) || entry.updatedAt <= 0
+          : typeof entry.date !== 'string' || typeof entry.name !== 'string' || typeof entry.month !== 'string' ||
+            !Number.isSafeInteger(entry.cents)))) {
       throw new Error('Arquivo remoto inválido. Os lançamentos locais foram preservados.');
     }
     remote = data.entries;

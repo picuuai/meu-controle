@@ -1,0 +1,15 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./style.css"><title>Meu Controle</title></head><body>
+<header><div class="brand"><span>▤</span> Meu Controle</div><label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label></header>
+<main><section class="hero"><div><p>CONTROLE DE CARTÕES</p><h1>Minhas compras</h1><p>Acompanhe as faturas do Itaú e da CAIXA.</p></div><button id="add">+ Nova compra</button></section>
+<div class="filters"><label>Mês da fatura <input id="month" type="month"></label><label>Cartão <select id="filter"><option value="">Todos</option><option>Itaú</option><option>CAIXA</option></select></label></div>
+<section class="metrics"><article><span>Total registrado no mês</span><strong id="total"></strong></article><article><span>Parcelas nos próximos meses</span><strong id="future"></strong></article><article><span>Parcelamentos pendentes</span><strong id="pending"></strong></article></section>
+<div class="workspace"><section class="panel"><h2>Lançamentos</h2><div id="entries"></div></section><section class="panel"><h2>Adicionar lançamentos</h2>
+<label>Cartão de origem <select id="bank"><option>Itaú</option><option>CAIXA</option></select></label>
+<label class="file">Selecionar PDF da fatura<input id="pdf" type="file" accept="application/pdf,.pdf"></label>
+<label class="file">Fotografar comprovante<input id="photo" type="file" accept="image/*" capture="environment"></label>
+<div id="receipt"></div>
+<label>Texto do alerta <textarea id="notice" rows="3" placeholder="Cole o texto da compra"></textarea></label>
+<button id="read">Revisar alerta</button><button id="native" hidden>Ativar notificações do Android</button>
+<p id="status" role="status"></p><div id="review"></div></section></div></main>
+<dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><label>Cartão<select name="bank"><option>Itaú</option><option>CAIXA</option></select></label><div class="pair"><label>Data da compra<input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
+<script type="module" src="./app.mjs"></script></body></html>

@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './dist/ledger.mjs';
 import {identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast,
   statementDueDate, statementReferenceMonth} from './dist/ledger.mjs';
+import {suggestCategory} from './dist/dashboard.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -143,6 +144,24 @@ test('cabeçalho de próximas faturas pode começar em uma página e continuar n
 test('CAIXA mantém a parcela do demonstrativo no mês da fatura', () => {
   const [entry] = parseStatement(['04/11 Mercado 02 DE 04 15,90D','05/11 OBRIGADO PELO PAGAMENTO 40,00C'], '2026-11', 'CAIXA');
   assert.deepEqual([entry.name, entry.month, entry.part, entry.count], ['Mercado','2026-11',2,4]);
+});
+
+test('previsão impressa da CAIXA é referência e não cria lançamento', () => {
+  const controls = {};
+  const rows = parseStatement([
+    'Saldo previsto próxima fatura: R$2.307,69 (Contempla as despesas)',
+    '04/11 Mercado 02 DE 04 15,90D'
+  ], '2026-11', 'CAIXA', controls);
+  assert.equal(controls.nextCents, 230769);
+  assert.equal(rows.length, 1);
+  assert.equal(forMonth(rows[0], '2026-12').cents, 1590);
+  assert.equal(futureTotal(rows[0], '2026-12'), 1590);
+});
+
+test('sugestão usa categoria anterior e contempla nomes comuns no PDF', () => {
+  assert.equal(suggestCategory('SUPERMERCADOS EXEMPLO'), 'Supermercado');
+  assert.equal(suggestCategory('IFD*iFoodOSASCO'), 'Alimentação');
+  assert.equal(suggestCategory('mercado exemplo', [{name:'MERCADO EXEMPLO', category:'Outros'}]), 'Outros');
 });
 
 test('compra sem parcela no PDF é à vista e mantém a chave dos lançamentos antigos', () => {

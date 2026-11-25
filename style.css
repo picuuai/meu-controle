@@ -25,3 +25,8 @@ main {padding-bottom: 28px}
 @media (max-width: 520px) {
   .analytics {grid-template-columns: minmax(0, 1fr)}
 }
+
+.pdf-drop {padding: 18px 12px; margin: 12px 0; border: 2px dashed var(--line); border-radius: 12px; text-align: center; color: var(--muted)}
+.pdf-drop p {margin: 0 0 8px}
+.pdf-drop.dragging {border-color: #278567; background: var(--bg)}
+#native-status {color: var(--muted); font-size: .9rem}

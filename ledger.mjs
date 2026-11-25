@@ -1,16 +1,21 @@
 export function parseNotice(text) {
-  const price = text.match(/R\$\s*([\d.]+,\d{2})/i);
-  const installments = text.match(/\b(\d{1,3})\s*(?:x\b|parcelas?\b)/i);
+  const price = text.match(/R\s*\$\s*([\d.]+,\d{2})/i);
+  const installments = text.match(/\b(\d{1,3})\s*(?:x\b|parcelas?\b|vezes\b)/i);
   const count = Number(installments?.[1]) || null;
-  const name = text.match(/\b(?:em|no estabelecimento)\s+(?!\d+\s*x\b)([^.\n;]+?)(?=\s+em\s+\d|[.;\n]|$)/i)?.[1]?.trim();
-  return {name: name || 'Compra do cartão', cents: price ? toCents(price[1]) : null, count: count <= 120 ? count : null, part: 1};
+  const merchant = /\b(?:estabelecimento\s*[:\-]?|em|na loja)\s+(?!\d|R\s*\$)([^.\n;]+?)(?=\s+(?:em|de|no dia|no cart[aã]o)\s+(?:\d|R\s*\$)|[.;\n]|$)/i;
+  const name = text.match(merchant)?.[1]?.trim();
+  const bank = /\bita[uú]\b/i.test(text) ? 'Itaú' : /\bcaixa\b/i.test(text) ? 'CAIXA' : undefined;
+  const date = text.match(/\b(\d{2})\/(\d{2})\/(\d{4})\b/);
+  const dateValue = date && date[3] + '-' + date[2] + '-' + date[1];
+  return {name: name || 'Compra do cartão', cents: price ? toCents(price[1]) : null,
+    count: count <= 120 ? count : null, part: 1, ...(bank && {bank}), ...(dateValue && {date: dateValue})};
 }
 
 const toCents = value => Math.round(Number(value.replaceAll('.', '').replace(',', '.')) * 100);
 
 export function parseStatement(lines, month, bank) {
   return lines.flatMap(line => {
-    const row = line.match(/^\s*(\d{2})\/(\d{2})(?:\/(\d{2}|\d{4}))?\s+(.+?)\s+(?:R\$\s*)?(-?[\d.]+,\d{2})\s*$/);
+    const row = line.match(/^\s*(\d{2})\s*\/\s*(\d{2})(?:\s*\/\s*(\d{4}|\d{2}))?\s+(.+?)\s+(?:R\s*\$\s*)?([-−]?\s*[\d.]+,\s*\d{2})\s*$/);
     if (!row) return [];
     const [,day, dateMonth, year, description, value] = row;
     if (/pagamento (?:de|da|efetuado)|saldo anterior|total da fatura/i.test(description)) return [];
@@ -23,7 +28,8 @@ export function parseStatement(lines, month, bank) {
     const parsed = new Date(date + 'T00:00Z');
     if (Number.isNaN(+parsed) || parsed.toISOString().slice(0,10) !== date) return [];
     const name = (marker ? description.slice(0, marker.index) : description).trim();
-    return name ? [{name, date, bank, month, cents: toCents(value), count, part, source:'pdf', statementValue:true}] : [];
+    const cents = toCents(value.replaceAll(/\s/g, '').replace('−', '-'));
+    return name ? [{name, date, bank, month, cents, count, part, source:'pdf', statementValue:true}] : [];
   });
 }
 

@@ -1,6 +1,17 @@
-const cacheName = 'meu-controle-v4';
-const files = ['./','./index.html','./style.css','./app.mjs','./ledger.mjs','./sync.mjs','./dashboard.mjs','./manifest.webmanifest','./icon-192.png','./icon-512.png','./pdf.mjs','./pdf.worker.mjs'];
-self.addEventListener('install', event => event.waitUntil(caches.open(cacheName).then(cache => cache.addAll(files))));
+const cacheName = 'meu-controle-v5';
+const files = ['./','./index.html','./style.css?v=5','./app.mjs?v=5','./ledger.mjs','./sync.mjs','./dashboard.mjs','./manifest.webmanifest','./icon-192.png','./icon-512.png','./pdf.mjs','./pdf.worker.mjs'];
+self.addEventListener('install', event => event.waitUntil((async () => {
+  const cache = await caches.open(cacheName);
+  await Promise.all(files.map(async path => {
+    const key = new URL(path, self.location);
+    const fresh = new URL(key);
+    fresh.searchParams.set('cache', cacheName);
+    const response = await fetch(fresh, {cache: 'reload'});
+    if (!response.ok) throw new Error('Falha ao armazenar ' + key.pathname);
+    await cache.put(key, response);
+  }));
+  await self.skipWaiting();
+})()));
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key.startsWith('meu-controle-') && key !== cacheName).map(key => caches.delete(key))))));
 self.addEventListener('fetch', event => {
   if (event.request.method === 'GET' && new URL(event.request.url).origin === self.location.origin) {

@@ -1,4 +1,5 @@
-import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './ledger.mjs?v=9';
+import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
+  identifyStatementRows, importStatementRows} from './ledger.mjs?v=10';
 import {mergeEntries, syncEntries} from './sync.mjs';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
@@ -12,6 +13,7 @@ const storageKey = 'meu-controle-ledger';
 const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
 let entries = readEntries();
 let queue = [];
+const selectedPdf = new Set();
 let editing;
 let initialCategory;
 
@@ -82,16 +84,78 @@ function render() {
   }
 }
 
-function review() {
+function review(refreshPdf = true) {
   $('review').replaceChildren();
-  for (const item of queue) {
+  for (const item of queue.filter(item => item.source !== 'pdf')) {
     const button = document.createElement('button');
     button.className = 'entry';
     button.textContent = item.name + ' · ' + (item.cents == null ? 'Valor pendente' : brl(item.cents));
     button.onclick = () => edit(item);
     $('review').append(button);
   }
+  if (!refreshPdf) return;
+  $('pdf-rows').replaceChildren();
+  const pdfRows = queue.filter(item => item.source === 'pdf');
+  $('pdf-review').hidden = !pdfRows.length;
+  const selectionChanged = () => {
+    const total = pdfRows.filter(item => selectedPdf.has(item)).length;
+    $('select-pdf-all').checked = total === pdfRows.length && total > 0;
+    $('select-pdf-all').indeterminate = total > 0 && total < pdfRows.length;
+    $('save-pdf').disabled = !total;
+    $('save-pdf').textContent = total ? 'Lançar selecionados (' + total + ')' : 'Lançar selecionados';
+  };
+  $('select-pdf-all').onchange = event => {
+    for (const item of pdfRows) {
+      if (event.target.checked) selectedPdf.add(item);
+      else selectedPdf.delete(item);
+    }
+    review();
+  };
+  for (const item of pdfRows) {
+    const button = document.createElement('button');
+    button.className = 'entry';
+    button.textContent = item.date.split('-').reverse().join('/') + ' · ' + item.name + ' · ' + brl(item.cents);
+    button.onclick = () => edit(item);
+    const row = document.createElement('div');
+    row.className = 'pdf-row';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = selectedPdf.has(item);
+    checkbox.setAttribute('aria-label', 'Selecionar ' + item.name + ' ' + brl(item.cents));
+    checkbox.onchange = () => {
+      if (checkbox.checked) selectedPdf.add(item);
+      else selectedPdf.delete(item);
+      selectionChanged();
+    };
+    row.append(checkbox, button);
+    $('pdf-rows').append(row);
+  }
+  selectionChanged();
 }
+
+$('save-pdf').onclick = () => {
+  const rows = queue.filter(item => selectedPdf.has(item));
+  if (!rows.length) return;
+  const result = importStatementRows(readEntries(), rows, () => crypto.randomUUID(), Date.now());
+  try {localStorage.setItem(storageKey, JSON.stringify(result.entries));}
+  catch { $('status').textContent = 'Falha ao salvar no aparelho. A seleção foi preservada.'; return; }
+  entries = result.entries;
+  const pending = new Set(result.pending);
+  queue = queue.filter(item => !selectedPdf.has(item) || pending.has(item));
+  selectedPdf.clear();
+  $('month').value = rows[0].month;
+  $('filter').value = rows[0].bank;
+  $('category-filter').value = '';
+  $('search').value = '';
+  render();
+  review();
+  $('status').textContent = [
+    result.added + ' novos lançamentos',
+    result.updated ? result.updated + ' compras conciliadas' : '',
+    result.duplicates ? result.duplicates + ' já registrados' : '',
+    result.pending.length ? result.pending.length + ' precisam de revisão individual' : ''
+  ].filter(Boolean).join(' · ') + '.';
+};
 
 function edit(entry) {
   editing = entry;
@@ -158,6 +222,7 @@ form.onsubmit = event => {
   entries = next;
   if (editing.nativeKey) window.AndroidAlerts?.acknowledge(editing.nativeKey);
   queue = queue.filter(row => row !== editing);
+  selectedPdf.delete(editing);
   $('editor').close();
   $('month').value = entry.month;
   render();
@@ -293,11 +358,14 @@ async function importPdf(files) {
         parsed.push(...parseStatement(await ocr.read(page, bank), month, bank));
       }
     }
-    queue = [...queue.filter(entry => entry.source !== 'pdf'),...parsed];
+    const imported = identifyStatementRows(parsed).map(row => ({...row, category: suggestCategory(row.name)}));
+    selectedPdf.clear();
+    for (const row of imported) selectedPdf.add(row);
+    queue = [...queue.filter(entry => entry.source !== 'pdf'),...imported];
     review();
     status.textContent = parsed.length
       ? parsed.length + ' lançamentos encontrados em ' + file.name + '.' +
-        (ocr ? ' Compare a lista com a fatura antes de salvar.' : ' Revise antes de salvar.')
+        (ocr ? ' Confira os dados reconhecidos.' : ' Revise a seleção.') + ' Depois, toque em Lançar selecionados.'
       : 'Nenhum lançamento reconhecido no PDF. Confira se o arquivo contém a lista de compras e se o texto está legível.';
   } catch (error) {
     console.warn('Falha ao importar fatura', error.name);
@@ -324,7 +392,7 @@ if (window.AndroidAlerts) {
     queue = [...queue.filter(row => !row.nativeKey), ...alerts.filter(alert => !entries.some(entry => entry.nativeKey === alert.key)).map(alert => ({
       ...parseNotice(alert.text), bank:alert.bank, date:alert.date, month:alert.date.slice(0,7), nativeKey:alert.key, source:'alert'
     }))];
-    review();
+    review(false);
   };
   window.addEventListener('focus',refresh);
   setInterval(refresh,2500);

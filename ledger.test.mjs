@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './dist/ledger.mjs';
+import {identifyStatementRows, importStatementRows} from './dist/ledger.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -33,6 +34,32 @@ test('fatura CAIXA separa duas compras na mesma altura e ignora cidade e valor e
   assert.deepEqual(entries.map(({name, cents, part}) => [name, cents, part]), [
     ['Mercado', 16000, 2], ['Estorno Exemplo', -4590, 1]
   ]);
+});
+
+test('lote preserva compras idênticas e ignora as mesmas linhas ao reimportar', () => {
+  const rows = identifyStatementRows(parseStatement(['04/11 Mercado 15,90', '04/11 Mercado 15,90'], '2026-11', 'CAIXA'));
+  let id = 0;
+  const allocate = () => String(++id);
+  const first = importStatementRows([], [rows[1]], allocate, 1);
+  const second = importStatementRows(first.entries, rows, allocate, 2);
+  assert.equal(second.added, 1);
+  assert.equal(second.duplicates, 1);
+  const repeated = importStatementRows(second.entries, rows, allocate, 3);
+  assert.deepEqual(repeated.entries, second.entries);
+  assert.equal(repeated.duplicates, 2);
+});
+
+test('lote concilia uma compra confirmada e deixa conflitos para revisão', () => {
+  const notice = {id:'alert', name:'Loja', cents:9000, bank:'Itaú', date:'2026-10-05', month:'2026-10', part:1, count:null, category:'Compras'};
+  const rows = identifyStatementRows(parseStatement(['05/10 Loja 02/03 30,00'], '2026-11', 'Itaú'));
+  const result = importStatementRows([notice], rows, () => 'novo', 1);
+  assert.equal(result.updated, 1);
+  assert.equal(result.entries[0].id, notice.id);
+  assert.equal(result.entries[0].category, notice.category);
+  assert.equal(forMonth(result.entries[0], '2026-12').cents, 3000);
+  const ambiguous = importStatementRows([notice, {...notice, id:'outro'}], rows, () => 'novo', 1);
+  assert.equal(ambiguous.pending.length, 1);
+  assert.equal(ambiguous.entries.length, 2);
 });
 
 test('fatura reconhece a parcela atual e projeta apenas as seguintes', () => {

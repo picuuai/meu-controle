@@ -246,7 +246,35 @@ if (window.AndroidAlerts) {
   window.addEventListener('focus',refresh);
   setInterval(refresh,2500);
   refresh();
-} else if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('./sw.js').catch(console.warn);
+} else {
+  const install = $('install-app');
+  let installPrompt;
+  install.hidden = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  window.addEventListener('beforeinstallprompt', event => {
+    event.preventDefault();
+    installPrompt = event;
+  });
+  window.addEventListener('appinstalled', () => {
+    installPrompt = undefined;
+    install.hidden = true;
+  });
+  install.onclick = async () => {
+    if (!installPrompt) {
+      $('install-help').showModal();
+      return;
+    }
+    const prompt = installPrompt;
+    installPrompt = undefined;
+    install.disabled = true;
+    try {
+      const {outcome} = await prompt.prompt();
+      if (outcome === 'accepted') install.hidden = true;
+    } catch {
+      $('install-help').showModal();
+    } finally {
+      install.disabled = false;
+    }
+  };
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.warn);
 }
 render();

@@ -1,6 +1,6 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="stylesheet" href="./style.css"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css"><title>Meu Controle</title></head><body>
 <header><div class="brand"><span>▤</span> Meu Controle</div><label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label></header>
-<main><section class="hero"><div><p>CONTROLE DE CARTÕES</p><h1>Minhas compras</h1><p>Acompanhe as faturas do Itaú e da CAIXA.</p></div><button id="add">+ Nova compra</button></section>
+<main><section class="hero"><div><p>CONTROLE DE CARTÕES</p><h1>Minhas compras</h1><p>Acompanhe as faturas do Itaú e da CAIXA.</p></div><div><button id="install-app" type="button" hidden>Instalar app</button> <button id="add">+ Nova compra</button></div></section>
 <div class="filters"><label>Mês da fatura <input id="month" type="month"></label><label>Cartão <select id="filter"><option value="">Todos</option><option>Itaú</option><option>CAIXA</option></select></label></div>
 <section class="metrics"><article><span>Total registrado no mês</span><strong id="total"></strong></article><article><span>Parcelas nos próximos meses</span><strong id="future"></strong></article><article><span>Parcelamentos pendentes</span><strong id="pending"></strong></article></section>
 <div class="workspace"><section class="panel"><h2>Lançamentos</h2><div id="entries"></div></section><section class="panel"><h2>Adicionar lançamentos</h2>
@@ -17,4 +17,12 @@
 <button id="sync-button" type="submit">Sincronizar agora</button><p id="sync-status" role="status"></p></form>
 </details></section></main>
 <dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><label>Cartão<select name="bank"><option>Itaú</option><option>CAIXA</option></select></label><div class="pair"><label>Data da compra<input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
+<dialog id="install-help"><h2>Instalar Meu Controle</h2>
+<p>Abra <a href="./">o endereço do app</a> diretamente no navegador do aparelho.</p>
+<ul>
+<li><strong>Android.</strong> No Chrome, abra o menu ⋮, escolha <strong>Adicionar à tela inicial</strong> e depois <strong>Instalar</strong>.</li>
+<li><strong>iPhone.</strong> No Safari, toque em <strong>Compartilhar</strong>, escolha <strong>Adicionar à Tela de Início</strong> e ative <strong>Abrir como App da Web</strong> se a opção aparecer.</li>
+<li><strong>Computador.</strong> No Chrome ou no Edge, procure a opção de instalar na barra de endereço ou no menu do navegador.</li>
+</ul>
+<form method="dialog" class="actions"><button type="submit">Fechar</button></form></dialog>
 <script type="module" src="./app.mjs"></script></body></html>

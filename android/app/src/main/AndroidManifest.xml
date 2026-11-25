@@ -1,5 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <uses-permission android:name="android.permission.INTERNET"/>
+  <queries>
+    <intent><action android:name="android.provider.Telephony.SMS_DELIVER"/></intent>
+  </queries>
   <application android:label="Meu Controle" android:allowBackup="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
     <activity android:name=".MainActivity" android:exported="true">
       <intent-filter>

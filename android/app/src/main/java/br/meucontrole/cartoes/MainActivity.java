@@ -124,7 +124,7 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface public void acknowledge(String key) {
-            CardAlerts.queue(MainActivity.this).edit().remove(key).apply();
+            CardAlerts.acknowledge(MainActivity.this, key);
         }
     }
 }

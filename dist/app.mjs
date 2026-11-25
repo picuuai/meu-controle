@@ -1,8 +1,8 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
   identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate,
-  statementReferenceMonth, monthAfter} from './ledger.mjs?v=20';
+  statementReferenceMonth, monthAfter} from './ledger.mjs?v=21';
 import {mergeEntries, syncEntries} from './sync.mjs?v=13';
-import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=20';
+import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=21';
 
 const $ = id => document.getElementById(id);
 const money = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -96,7 +96,7 @@ function render() {
     const detail = document.createElement('span');
     detail.textContent = entry.name;
     const subtitle = document.createElement('small');
-    subtitle.textContent = [categoryOf(entry), entry.bank, entry.date.split('-').reverse().join('/'),
+    subtitle.textContent = [categoryOf(entry), entry.bank, [entry.date.split('-').reverse().join('/'), entry.time].filter(Boolean).join(' '),
       paymentLabel(entry, bill.part), forecast ? 'Previsto' : ''].filter(Boolean).join(' · ');
     detail.append(subtitle);
     const value = document.createElement('b');
@@ -433,7 +433,7 @@ $('add').onclick = () => edit({});
 $('close').onclick = () => $('editor').close();
 $('read').onclick = () => {
   const text = $('notice').value.trim();
-  if (text) edit({...parseNotice(text),source:'alert'});
+  if (text) edit({...parseNotice(text, localDate),source:'alert'});
   else $('notice').focus();
 };
 
@@ -574,12 +574,14 @@ if (window.AndroidAlerts) {
   const refresh = () => {
     const enabled = window.AndroidAlerts.enabled?.();
     $('native-status').textContent = enabled
-      ? 'Acesso às notificações ativado. Novos alertas de compra aparecem abaixo para revisão.'
+      ? 'Acesso ativado. Alertas dos bancos e notificações de compra do SMS 29194 aparecem abaixo para revisão.'
       : 'Autorize Meu Controle nas configurações do Android para receber alertas.';
     const alerts = JSON.parse(window.AndroidAlerts.pending());
-    queue = [...queue.filter(row => !row.nativeKey), ...alerts.filter(alert => !entries.some(entry => entry.nativeKey === alert.key)).map(alert => ({
-      ...parseNotice(alert.text), bank:alert.bank, date:alert.date, month:alert.date.slice(0,7), nativeKey:alert.key, source:'alert'
-    }))];
+    queue = [...queue.filter(row => !row.nativeKey), ...alerts.filter(alert => !entries.some(entry => entry.nativeKey === alert.key)).map(alert => {
+      const parsed = parseNotice(alert.text, alert.date);
+      const date = parsed.date || alert.date;
+      return {...parsed, bank:alert.bank, date, month:date.slice(0,7), nativeKey:alert.key, source:'alert'};
+    })];
     review(false);
   };
   window.addEventListener('focus',refresh);

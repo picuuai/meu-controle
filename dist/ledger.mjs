@@ -1,4 +1,17 @@
-export function parseNotice(text) {
+export function parseNotice(text, receivedDate = new Date().toLocaleDateString('sv-SE')) {
+  const caixaPurchase = text.match(/\bCAIXA\s*:\s*Compra\s+aprovada\s+em\s+(.+?)[,\s]+R\s*\$\s*([\d.]+,\d{2})(?:\s+em\s+(\d{1,3})\s*(?:x\b|vezes\b|parcelas?\b))?\s*,?\s*(\d{2})\/(\d{2})(?:\/(\d{4}))?(?:\s+(?:às|as)\s+(\d{2}:\d{2}))?/iu);
+  if (caixaPurchase) {
+    const [, name, amount, installments, day, month, year, time] = caixaPurchase;
+    const count = Number(installments) || null;
+    return {name:name.trim(), cents:toCents(amount), count:count <= 120 ? count : null, part:1, bank:'CAIXA',
+      ...noticeDate(day, month, year, receivedDate), ...(time && {time})};
+  }
+  const compact = text.trim().match(/^(?:29194\s*[:\n]\s*)?(.+?)\s+compra\s+(\d{3,9})\s+(\d{2})\/(\d{2})\/(\d{4})$/iu);
+  if (compact) {
+    const [, name, amount, day, month, year] = compact;
+    return {name:name.trim(), cents:Number(amount), count:null, part:1, bank:'CAIXA',
+      ...noticeDate(day, month, year, receivedDate)};
+  }
   const price = text.match(/R\s*\$\s*([\d.]+,\d{2})/i);
   const installments = text.match(/\b(\d{1,3})\s*(?:x\b|parcelas?\b|vezes\b)/i);
   const count = Number(installments?.[1]) || null;
@@ -9,6 +22,14 @@ export function parseNotice(text) {
   const dateValue = date && date[3] + '-' + date[2] + '-' + date[1];
   return {name: name || 'Compra do cartão', cents: price ? toCents(price[1]) : null,
     count: count <= 120 ? count : null, part: 1, ...(bank && {bank}), ...(dateValue && {date: dateValue})};
+}
+
+function noticeDate(day, month, year, receivedDate) {
+  const receivedYear = Number(receivedDate.slice(0, 4));
+  const inferredYear = receivedYear - Number(month + '-' + day > receivedDate.slice(5));
+  const date = (year || inferredYear) + '-' + month + '-' + day;
+  const parsed = new Date(date + 'T00:00Z');
+  return Number.isFinite(+parsed) && parsed.toISOString().slice(0, 10) === date ? {date} : {};
 }
 
 const toCents = value => Math.round(Number(value.replaceAll('.', '').replace(',', '.')) * 100);

@@ -18,6 +18,15 @@ test('alerta identifica Itaú e preserva o estabelecimento antes da data', () =>
   });
 });
 
+test('SMS da CAIXA identifica loja, valor e horário sem confundir o final do cartão', () => {
+  const simple = parseNotice('CAIXA: Compra aprovada em SUPERMERCADO CARACOL, R$ 58,60, 24/11 as 15:24. VISA final XXXX. Nao reconhece? Envie BLXXXX p/cancelar cartao', '2026-11-24');
+  assert.deepEqual(simple, {name:'SUPERMERCADO CARACOL', cents:5860, count:null, part:1, bank:'CAIXA', date:'2026-11-24', time:'15:24'});
+  const installment = parseNotice('CAIXA: Compra aprovada em MERCADOLIVRE*MERC R$       264,04 em   4 vezes, 08/11 as 14:39, VISA VIRTUAL final XXXX. Se desconhecer envie BLXXXX', '2026-11-24');
+  assert.deepEqual(installment, {name:'MERCADOLIVRE*MERC', cents:26404, count:4, part:1, bank:'CAIXA', date:'2026-11-08', time:'14:39'});
+  const compact = parseNotice('sup caracol compra  5860 24/11/2026', '2026-11-24');
+  assert.deepEqual(compact, {name:'sup caracol', cents:5860, count:null, part:1, bank:'CAIXA', date:'2026-11-24'});
+});
+
 test('fatura digitalizada aceita espaços na data e no valor e preserva o sinal', () => {
   const [entry] = parseStatement(['04 / 11 Loja 02/03 R$ − 15, 90'], '2026-11', 'CAIXA');
   assert.equal(entry.cents, -1590);

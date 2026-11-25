@@ -5,7 +5,7 @@ export const categories = ['Alimentação', 'Supermercado', 'Transporte', 'Morad
   'Saúde', 'Educação', 'Lazer', 'Compras', 'Assinaturas', 'Viagens', 'Tarifas e juros', 'Outros'];
 
 const rules = [
-  ['Supermercado', /\b(supermercados?|hipermercados?|atacadao|carrefour|assai|horti\s*fruti|acougue)\b/],
+  ['Supermercado', /^sup\b|\b(supermercados?|hipermercados?|atacadao|carrefour|assai|horti\s*fruti|acougue)\b/],
   ['Alimentação', /ifood|\b(restaurantes?|lanchonetes?|padarias?|pizzas?|pizzaria|hamburgueria|churrascaria|cafeteria|sorveteria|subway)\b/],
   ['Transporte', /\b(uber|posto|rodoposto|combustivel|estacionamento|parking|pedagio|gasolina|autolubrificante)\b/],
   ['Moradia e contas', /\b(energia|condominio|aluguel|saneamento|internet)\b/],

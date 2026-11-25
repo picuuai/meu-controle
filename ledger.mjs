@@ -25,6 +25,11 @@ function forecastControl(text) {
   return null;
 }
 
+function caixaForecastControl(text) {
+  const match = text.match(/\bsaldo\s+previsto\s+pr[oó]xima\s+fatura\s*:\s*R\s*\$\s*([\d.]+,\d{2})/i);
+  return match ? ['nextCents', toCents(match[1])] : null;
+}
+
 function statementDate(items, labelPattern) {
   const format = /\b(\d{2})\s*\/\s*(\d{2})\s*\/\s*(\d{4})\b/;
   const dates = new Map();
@@ -96,7 +101,7 @@ export function statementTextRows(items, pageWidth, bank, section = {}) {
     for (const column of [0, 1]) {
       const region = words.filter(word => Number(word.x / pageWidth >= layout.split) === column);
       const label = region.map(word => word.text).join(' ');
-      const control = bank === 'Itaú' && forecastControl(label);
+      const control = bank === 'Itaú' ? forecastControl(label) : caixaForecastControl(label);
       if (control) {
         forecast[column] = false;
         lines.push(label);
@@ -132,7 +137,7 @@ export function parseStatement(lines, month, bank, controls = {}) {
   return lines.flatMap(line => {
     const text = typeof line === 'string' ? line : line.text;
     if (forecastHeading.test(text)) { forecast = true; return []; }
-    const control = bank === 'Itaú' && forecastControl(text);
+    const control = bank === 'Itaú' ? forecastControl(text) : bank === 'CAIXA' && caixaForecastControl(text);
     if (control) {
       controls[control[0]] = control[1];
       forecast = false;
@@ -185,7 +190,7 @@ export function installmentCount(entry) {
     !installmentMarker.test(entry.name) && !incompleteInstallment.test(entry.name) ? 1 : null;
 }
 
-function monthAfter(month) {
+export function monthAfter(month) {
   const number = monthNumber(month) + 1;
   return Math.floor(number / 12) + '-' + String(number % 12 + 1).padStart(2, '0');
 }
@@ -253,6 +258,7 @@ export function importStatementRows(entries, rows, createId, now, selected) {
   const alreadyRecorded = new Set();
   const ordered = [...rows].sort((a, b) => Number(Boolean(a.projection)) - Number(Boolean(b.projection)));
   for (const row of ordered) {
+    const {categoryReviewed, ...transaction} = row;
     const known = knownKeys.get(row.statementKey);
     if (known) {
       const confirmed = known.projection && !row.projection;
@@ -279,7 +285,7 @@ export function importStatementRows(entries, rows, createId, now, selected) {
     if (!selected.has(row)) continue;
     if (!existing) {
       const id = createId();
-      saved.set(id, {...row, id, updatedAt: now});
+      saved.set(id, {...transaction, id, updatedAt: now});
       added++;
       continue;
     }
@@ -304,7 +310,7 @@ export function importStatementRows(entries, rows, createId, now, selected) {
       alreadyRecorded.add(row);
       continue;
     }
-    saved.set(existing.id, {...existing, ...row, category: existing.category || row.category,
+    saved.set(existing.id, {...existing, ...transaction, category: categoryReviewed ? row.category : existing.category || row.category,
       updatedAt: Math.max(now, (existing.updatedAt || 0) + 1)});
     updated++;
   }

@@ -1,8 +1,8 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
   identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate,
-  statementReferenceMonth} from './ledger.mjs?v=19';
+  statementReferenceMonth, monthAfter} from './ledger.mjs?v=20';
 import {mergeEntries, syncEntries} from './sync.mjs?v=13';
-import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
+import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=20';
 
 const $ = id => document.getElementById(id);
 const money = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -72,7 +72,12 @@ function render() {
   const projected = visible.filter(row => row.forecast);
   $('total-caption').textContent = !projected.length ? 'Total da fatura registrada'
     : projected.length === visible.length ? 'Total previsto no mês' : 'Total registrado e previsto';
-  $('future').textContent = brl(selected.reduce((sum,entry) => sum + futureTotal(entry,month),0));
+  const nextMonth = monthAfter(month);
+  const nextTotal = selected.reduce((sum, entry) => sum + (forMonth(entry, nextMonth)?.cents || 0), 0);
+  const laterTotal = selected.reduce((sum,entry) => sum + futureTotal(entry, nextMonth),0);
+  $('next-month-caption').textContent = 'Próxima fatura · ' + nextMonth.split('-').reverse().join('/');
+  $('future').textContent = brl(nextTotal);
+  $('later-total').textContent = 'Após a próxima: ' + brl(laterTotal);
   $('pending').textContent = visible.filter(({entry}) => !installmentCount(entry)).length;
   drawBars('category-chart', groupCharges(visible, categoryOf));
   drawBars('card-chart', groupCharges(visible, entry => entry.bank));
@@ -131,7 +136,7 @@ function review(refreshPdf = true) {
   if (!refreshPdf) return;
   $('pdf-rows').replaceChildren();
   const pdfRows = queue.filter(item => item.source === 'pdf').sort((a, b) =>
-    a.month.localeCompare(b.month) || Number(!installmentCount(a)) - Number(!installmentCount(b)));
+    a.month.localeCompare(b.month) || Number(Boolean(installmentCount(a))) - Number(Boolean(installmentCount(b))));
   $('pdf-review').hidden = !pdfRows.length;
   const selectionChanged = () => {
     const total = pdfRows.filter(item => selectedPdf.has(item)).length;
@@ -148,26 +153,30 @@ function review(refreshPdf = true) {
     review();
   };
   let billingMonth;
-  let showingPending = false;
+  let previousPending;
   for (const item of pdfRows) {
     if (billingMonth !== item.month) {
       billingMonth = item.month;
-      showingPending = false;
+      previousPending = undefined;
       const heading = document.createElement('h3');
       heading.className = 'pdf-billing-month';
       heading.textContent = (item.projection ? 'Próxima fatura' : 'Fatura do mês') + ' · ' + billingMonth.split('-').reverse().join('/');
       $('pdf-rows').append(heading);
     }
-    if (!showingPending && !installmentCount(item)) {
-      showingPending = true;
+    const isPending = !installmentCount(item);
+    if (previousPending !== isPending) {
+      previousPending = isPending;
       const heading = document.createElement('h4');
       heading.className = 'pdf-billing-month';
-      heading.textContent = 'Parcelamento a confirmar';
+      heading.textContent = isPending ? 'Parcelamento a confirmar' : 'Parcelamento definido';
       $('pdf-rows').append(heading);
     }
     const button = document.createElement('button');
-    button.className = 'entry';
-    button.textContent = item.date.split('-').reverse().join('/') + ' · ' + item.name + ' · ' + brl(item.cents) + ' · ' + paymentLabel(item);
+    button.className = 'entry pdf-item-summary';
+    const updateLabel = () => {
+      button.textContent = item.date.split('-').reverse().join('/') + ' · ' + item.name + ' · ' + brl(item.cents) + ' · ' + paymentLabel(item);
+    };
+    updateLabel();
     button.onclick = () => edit(item);
     const row = document.createElement('div');
     row.className = 'pdf-row';
@@ -180,7 +189,54 @@ function review(refreshPdf = true) {
       else selectedPdf.delete(item);
       selectionChanged();
     };
-    row.append(checkbox, button);
+    const header = document.createElement('div');
+    header.className = 'pdf-row-header';
+    header.append(checkbox, button);
+    const fields = document.createElement('div');
+    fields.className = 'pdf-row-fields';
+    const category = document.createElement('select');
+    category.append(new Option(uncategorized, ''));
+    for (const value of categories) category.add(new Option(value, value));
+    category.value = item.category || '';
+    category.onchange = () => {
+      item.category = category.value;
+      item.categoryReviewed = true;
+    };
+    const part = document.createElement('input');
+    const count = document.createElement('input');
+    for (const input of [part, count]) {
+      input.type = 'number';
+      input.min = '1';
+      input.max = '120';
+      input.step = '1';
+      input.inputMode = 'numeric';
+    }
+    part.required = true;
+    part.value = item.part;
+    count.value = installmentCount(item) ?? '';
+    count.placeholder = 'Pendente';
+    const updateInstallments = () => {
+      const confirmed = Boolean(installmentCount(item));
+      part.setCustomValidity(count.value && part.valueAsNumber > count.valueAsNumber
+        ? 'A parcela atual deve ser menor ou igual ao total.' : '');
+      if (!part.validity.valid || !count.validity.valid) return;
+      item.part = part.valueAsNumber;
+      item.count = count.value ? count.valueAsNumber : null;
+      item.installmentPending = !item.count;
+      updateLabel();
+      if (!confirmed && item.count) {
+        selectedPdf.add(item);
+        checkbox.checked = true;
+        selectionChanged();
+      }
+    };
+    part.oninput = count.oninput = updateInstallments;
+    for (const [labelText, field] of [['Categoria', category], ['Parcela', part], ['Total de parcelas', count]]) {
+      const label = document.createElement('label');
+      label.append(labelText, field);
+      fields.append(label);
+    }
+    row.append(header, fields);
     $('pdf-rows').append(row);
   }
   selectionChanged();
@@ -189,6 +245,12 @@ function review(refreshPdf = true) {
 $('save-pdf').onclick = () => {
   const rows = queue.filter(item => selectedPdf.has(item));
   if (!rows.length) return;
+  for (const row of $('pdf-rows').querySelectorAll('.pdf-row')) {
+    if (!row.querySelector('input[type=checkbox]').checked) continue;
+    for (const input of row.querySelectorAll('input[type=number]')) {
+      if (!input.reportValidity()) return;
+    }
+  }
   const result = importStatementRows(readEntries(), statementRows, () => crypto.randomUUID(), Date.now(), selectedPdf);
   try {localStorage.setItem(storageKey, JSON.stringify(result.entries));}
   catch { $('status').textContent = 'Falha ao salvar no aparelho. A seleção foi preservada.'; return; }
@@ -406,6 +468,7 @@ dropZone.ondrop = event => {
 async function importPdf(files) {
   if (!files.length || pickPdf.disabled) return;
   const status = $('status');
+  $('pdf-bank-forecast').hidden = true;
   const [file] = files;
   if (files.length !== 1 || !/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
     status.textContent = 'Selecione um único arquivo PDF da fatura.';
@@ -464,10 +527,16 @@ async function importPdf(files) {
         parsed.push(...parseStatement(await ocr.read(page, bank), month, bank, controls));
       }
     }
+    const previous = readEntries();
     const imported = identifyStatementRows(applyStatementForecast(parsed, month, controls))
-      .map(row => ({...row, category: suggestCategory(row.name)}));
+      .map(row => ({...row, category: suggestCategory(row.name, previous)}));
     statementRows = imported;
-    const {alreadyRecorded} = importStatementRows(readEntries(), imported, () => Symbol(), 0);
+    const {alreadyRecorded} = importStatementRows(previous, imported, () => Symbol(), 0);
+    if (Number.isSafeInteger(controls.nextCents)) {
+      $('pdf-bank-forecast').textContent = 'Previsão do banco no PDF para ' +
+        monthAfter(month).split('-').reverse().join('/') + ': ' + brl(controls.nextCents) + '.';
+      $('pdf-bank-forecast').hidden = false;
+    }
     const remaining = imported.filter(row => !alreadyRecorded.has(row));
     selectedPdf.clear();
     for (const row of remaining) {

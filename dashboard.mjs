@@ -5,20 +5,26 @@ export const categories = ['Alimentação', 'Supermercado', 'Transporte', 'Morad
   'Saúde', 'Educação', 'Lazer', 'Compras', 'Assinaturas', 'Viagens', 'Tarifas e juros', 'Outros'];
 
 const rules = [
-  ['Supermercado', /\b(supermercado|hipermercado|atacadao|carrefour|assai)\b/],
-  ['Alimentação', /\b(ifood|restaurante|lanchonete|padaria|pizzaria|hamburgueria)\b/],
-  ['Transporte', /\b(uber|posto|combustivel|estacionamento|pedagio|gasolina)\b/],
+  ['Supermercado', /\b(supermercados?|hipermercados?|atacadao|carrefour|assai|horti\s*fruti|acougue)\b/],
+  ['Alimentação', /ifood|\b(restaurantes?|lanchonetes?|padarias?|pizzas?|pizzaria|hamburgueria|churrascaria|cafeteria|sorveteria|subway)\b/],
+  ['Transporte', /\b(uber|posto|rodoposto|combustivel|estacionamento|parking|pedagio|gasolina|autolubrificante)\b/],
   ['Moradia e contas', /\b(energia|condominio|aluguel|saneamento|internet)\b/],
-  ['Saúde', /\b(farmacia|drogaria|clinica|dentista|laboratorio)\b/],
+  ['Saúde', /\b(farmacias?|pharmacia|drogarias?|drogasil|clinica|dentista|laboratorio)\b|\braia\d*/],
   ['Educação', /\b(escola|faculdade|universidade|curso)\b/],
   ['Lazer', /\b(cinema|teatro|show|parque)\b/],
-  ['Assinaturas', /\b(netflix|spotify|disney|deezer)\b/],
+  ['Assinaturas', /netflix|spotify|prime\s*video|google\s*one|\b(disney|deezer)\b/],
   ['Viagens', /\b(hotel|pousada|latam|passagem|airbnb)\b/],
-  ['Tarifas e juros', /\b(anuidade|tarifa|juros|iof)\b/]
+  ['Tarifas e juros', /\b(anuidade|tarifa|juros|iof)\b/],
+  ['Compras', /\b(sapataria|calcados|moda|aliexpress|mercado\s*livre)\b/]
 ];
 
-export function suggestCategory(name) {
-  const normalized = name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+const normalizeName = name => name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+
+export function suggestCategory(name, previous = []) {
+  const normalized = normalizeName(name);
+  const match = previous.findLast(entry => !entry.deleted && categories.includes(entry.category) &&
+    normalizeName(entry.name) === normalized);
+  if (match) return match.category;
   return rules.find(([, pattern]) => pattern.test(normalized))?.[0] || '';
 }
 

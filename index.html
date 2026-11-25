@@ -1,9 +1,9 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=18"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=20"><title>Meu Controle</title></head><body>
 <header><div class="brand"><span>▤</span> Meu Controle</div><label class="theme">Tema <select id="theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></label></header>
 <main>
 <section class="hero"><div><h1>Painel financeiro</h1><p>Faturas e parcelas dos seus cartões</p></div><div class="hero-actions"><button id="install-app" type="button" hidden>Instalar app</button><button id="add">+ Nova compra</button></div></section>
 <div class="filters"><label>Mês da fatura <input id="month" type="month"></label><label>Cartão <select id="filter"><option value="">Todos</option><option>Itaú</option><option>CAIXA</option><option>XP Infinity</option></select></label><label>Categoria <select id="category-filter"><option value="">Todas</option></select></label></div>
-<section class="metrics" aria-label="Resumo da fatura"><article><span id="total-caption">Total da fatura registrada</span><strong id="total"></strong></article><article><span>Parcelas nos próximos meses</span><strong id="future"></strong></article><article><span>Parcelamentos pendentes</span><strong id="pending"></strong></article></section>
+<section class="metrics" aria-label="Resumo da fatura"><article><span id="total-caption">Total da fatura registrada</span><strong id="total"></strong></article><article><div><span id="next-month-caption">Próxima fatura</span><small id="later-total"></small></div><strong id="future"></strong></article><article><span>Parcelamentos pendentes</span><strong id="pending"></strong></article></section>
 <div class="analytics">
 <section class="panel"><h2>Gastos por categoria</h2><ul class="chart" id="category-chart"></ul></section>
 <section class="panel"><h2>Gastos por cartão</h2><ul class="chart" id="card-chart"></ul></section>
@@ -16,7 +16,7 @@
 <button id="pick-pdf" type="button">Escolher PDF</button>
 <input id="pdf" type="file" accept="application/pdf,.pdf" hidden>
 </div>
-<p id="status" role="status"></p>
+<p id="status" role="status"></p><p id="pdf-bank-forecast" hidden></p>
 <section id="pdf-review" class="pdf-review" hidden aria-label="Revisão da fatura">
 <div class="pdf-review-actions">
 <label class="review-check"><input type="checkbox" id="select-pdf-all">Selecionar todos</label>
@@ -43,4 +43,4 @@
 <li><strong>Computador.</strong> No Chrome ou no Edge, procure a opção de instalar na barra de endereço ou no menu do navegador.</li>
 </ul>
 <form method="dialog" class="actions"><button type="submit">Fechar</button></form></dialog>
-<script type="module" src="./app.mjs?v=19"></script></body></html>
+<script type="module" src="./app.mjs?v=20"></script></body></html>

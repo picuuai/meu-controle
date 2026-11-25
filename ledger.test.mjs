@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {parseNotice, parseStatement, forMonth, futureTotal, candidates} from './dist/ledger.mjs';
+import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './dist/ledger.mjs';
 
 test('alerta omisso mantém parcelas pendentes', () => {
   assert.deepEqual(parseNotice('Compra de R$ 180,00 em Mercado'), {
@@ -19,6 +19,20 @@ test('fatura digitalizada aceita espaços na data e no valor e preserva o sinal'
   const [entry] = parseStatement(['04 / 11 Loja 02/03 R$ − 15, 90'], '2026-11', 'CAIXA');
   assert.equal(entry.cents, -1590);
   assert.equal(entry.part, 2);
+});
+
+test('fatura CAIXA separa duas compras na mesma altura e ignora cidade e valor em dólar', () => {
+  const item = (str, x, width) => ({str, width, transform:[1, 0, 0, 1, x, 100]});
+  const items = [
+    item('02/11', 35, 15), item('Mercado 02/04', 55, 50), item('São Paulo', 151, 35),
+    item('12,00', 220, 18), item('160,00D', 259, 28),
+    item('03/11', 311, 15), item('Estorno Exemplo', 331, 50), item('45,90C', 537, 29)
+  ];
+  const entries = parseStatement(statementTextRows(items, 595, 'CAIXA'), '2026-11', 'CAIXA');
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries.map(({name, cents, part}) => [name, cents, part]), [
+    ['Mercado', 16000, 2], ['Estorno Exemplo', -4590, 1]
+  ]);
 });
 
 test('fatura reconhece a parcela atual e projeta apenas as seguintes', () => {

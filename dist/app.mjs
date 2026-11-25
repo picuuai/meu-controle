@@ -1,4 +1,4 @@
-import {parseNotice, parseStatement, forMonth, futureTotal, candidates} from './ledger.mjs';
+import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows} from './ledger.mjs?v=9';
 import {mergeEntries, syncEntries} from './sync.mjs';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
@@ -279,15 +279,8 @@ async function importPdf(files) {
         continue;
       }
       textPages.push(page);
-      const rows = [];
-      for (const item of items) {
-        if (!item.str?.trim()) continue;
-        const [, , , , x, y] = item.transform;
-        const row = rows.find(candidate => Math.abs(y-candidate.y) < 2);
-        if (row) row.items.push({x,text:item.str.trim()});
-        else rows.push({y,items:[{x,text:item.str.trim()}]});
-      }
-      const lines = rows.sort((a,b)=>b.y-a.y).map(row=>row.items.sort((a,b)=>a.x-b.x).map(item=>item.text).join(' '));
+      const width = page.getViewport({scale: 1}).width;
+      const lines = statementTextRows(items, width, bank);
       parsed.push(...parseStatement(lines,month,bank));
     }
     // Some scans have a text layer whose words do not align with the printed rows.

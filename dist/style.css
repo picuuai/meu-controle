@@ -1,2 +1,27 @@
 *{box-sizing:border-box}:root{color-scheme:light;--bg:#f0f4f1;--paper:#fff;--ink:#10271f;--muted:#4c655a;--line:#d6e2da;--accent:#c4f38a;--green:#122b24}html[data-theme=dark]{color-scheme:dark;--bg:#101b17;--paper:#192923;--ink:#f3f8f4;--muted:#acc1b5;--line:#3a5146}@media(prefers-color-scheme:dark){html:not([data-theme]){color-scheme:dark;--bg:#101b17;--paper:#192923;--ink:#f3f8f4;--muted:#acc1b5;--line:#3a5146}}
 body{margin:0;background:var(--bg);color:var(--ink);font:16px system-ui,sans-serif}header,main{width:min(1120px,calc(100% - 32px));margin:auto}header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 0}.brand{font-size:1.15rem;font-weight:800}.brand span{background:var(--green);color:var(--accent);padding:5px 9px;border-radius:8px;margin-right:5px}.theme{display:flex;align-items:center;gap:8px}.hero{background:var(--green);color:#fff;border-radius:24px;padding:clamp(24px,5vw,52px);display:flex;align-items:end;justify-content:space-between;gap:16px;flex-wrap:wrap}.hero p{margin:0;color:#c8dbce}.hero p:first-child{color:var(--accent);font-size:.85rem;letter-spacing:.09em;font-weight:700}h1{font-size:clamp(2.5rem,7vw,4.5rem);letter-spacing:-.07em;line-height:1;margin:12px 0}h2{margin:0 0 16px;font-size:1.25rem}.filters,.actions,.pair{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}.pair>*{flex:1;min-width:130px}.metrics,.workspace{display:grid;gap:14px;margin:14px 0}.metrics{grid-template-columns:repeat(3,1fr)}.workspace{grid-template-columns:1.45fr 1fr}.panel,article,dialog{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px;color:var(--ink)}article span,small,#status,#match{color:var(--muted)}article strong{display:block;font-size:1.6rem;margin-top:5px}label{display:grid;gap:5px;font-size:.9rem;font-weight:650}input,textarea,select,button{font:inherit;border:1px solid var(--line);border-radius:9px;min-height:42px;padding:8px 10px;color:var(--ink);background:var(--paper);min-width:0}textarea,input:not([type=file]){width:100%}button{cursor:pointer;font-weight:750}button[type=submit],#add,#read{background:var(--accent);color:#122b24;border-color:transparent}.panel label,.panel>button{margin-bottom:10px}.file input{width:100%}.entry{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;margin-bottom:8px}.entry small{display:block;font-weight:500}.entry b{white-space:nowrap}.receipt img{max-width:100%;max-height:160px}dialog{width:min(500px,calc(100% - 24px));max-height:90dvh}dialog::backdrop{background:#081611aa}form>label{margin-top:10px}.actions{justify-content:flex-end;margin-bottom:0}@media(max-width:700px){.workspace{grid-template-columns:1fr}.metrics{grid-template-columns:1fr}.metrics article{display:flex;justify-content:space-between;align-items:center;gap:8px}article strong{margin:0;font-size:1.2rem}}
+
+main {padding-bottom: 28px}
+.hero {align-items: center}
+.hero h1 {margin: 0 0 10px; letter-spacing: -.055em}
+.hero p {color: #c8dbce}
+.hero-actions {display: flex; flex-wrap: wrap; gap: 8px}
+.filters {align-items: end}
+.filters label {flex: 1; min-width: 140px}
+.metrics strong {font-variant-numeric: tabular-nums}
+.analytics {display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px}
+.chart {list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; color: var(--muted); font-size: .9rem}
+.chart li > div:first-child {display: flex; justify-content: space-between; gap: 8px; align-items: baseline}
+.chart strong {color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums}
+.chart-track {height: 7px; margin-top: 5px; border-radius: 999px; background: var(--line); overflow: hidden}
+.chart-track span {display: block; height: 100%; background: #278567; border-radius: inherit}
+.chart-track .credit-bar {background: #aa6638}
+.entry-search {margin-bottom: 16px}
+#entries {overflow-wrap: anywhere}
+@media (max-width: 780px) {
+  .analytics {grid-template-columns: repeat(2, minmax(0, 1fr))}
+  .analytics > :last-child {grid-column: 1 / -1}
+}
+@media (max-width: 520px) {
+  .analytics {grid-template-columns: minmax(0, 1fr)}
+}

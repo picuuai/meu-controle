@@ -1,5 +1,6 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates} from './ledger.mjs';
 import {mergeEntries, syncEntries} from './sync.mjs';
+import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs';
 
 const $ = id => document.getElementById(id);
 const money = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
@@ -13,24 +14,66 @@ let entries = readEntries();
 let queue = [];
 let editing;
 let receiptUrl;
+let initialCategory;
+
+for (const category of categories) fields.category.add(new Option(category, category));
+for (const category of [...categories, uncategorized]) $('category-filter').add(new Option(category, category));
+
+function drawBars(id, series) {
+  const chart = $(id);
+  chart.replaceChildren();
+  const max = Math.max(0, ...series.map(([, cents]) => Math.abs(cents)));
+  if (!max && !series.length) {
+    const item = document.createElement('li');
+    item.textContent = 'Sem lançamentos neste recorte.';
+    chart.append(item);
+    return;
+  }
+  for (const [label, cents] of series) {
+    const item = document.createElement('li');
+    const caption = document.createElement('div');
+    const name = document.createElement('span');
+    const amount = document.createElement('strong');
+    name.textContent = label;
+    amount.textContent = brl(cents);
+    caption.append(name, amount);
+    const track = document.createElement('div');
+    track.className = 'chart-track';
+    track.setAttribute('aria-hidden', 'true');
+    const bar = document.createElement('span');
+    bar.className = cents < 0 ? 'credit-bar' : '';
+    bar.style.width = (max ? Math.abs(cents) / max * 100 : 0) + '%';
+    track.append(bar);
+    item.append(caption, track);
+    chart.append(item);
+  }
+}
 
 function render() {
   const month = $('month').value;
-  const selected = entries.filter(entry => !$('filter').value || entry.bank === $('filter').value);
+  const card = $('filter').value;
+  const category = $('category-filter').value;
+  const selected = entries.filter(entry =>
+    (!card || entry.bank === card) && (!category || categoryOf(entry) === category));
   const visible = selected.map(entry => ({entry, bill:forMonth(entry,month)})).filter(row => row.bill);
   visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
   $('total').textContent = brl(visible.reduce((sum,row) => sum + row.bill.cents,0));
   $('future').textContent = brl(selected.reduce((sum,entry) => sum + futureTotal(entry,month),0));
   $('pending').textContent = visible.filter(({entry}) => !entry.count).length;
+  drawBars('category-chart', groupCharges(visible, categoryOf));
+  drawBars('card-chart', groupCharges(visible, entry => entry.bank));
+  drawBars('monthly-chart', monthlyCharges(selected, month));
+  const query = $('search').value.trim().toLocaleLowerCase('pt-BR');
+  const results = visible.filter(({entry}) => entry.name.toLocaleLowerCase('pt-BR').includes(query));
   $('entries').replaceChildren();
-  if (!visible.length) $('entries').textContent = 'Nenhum lançamento neste mês.';
-  for (const {entry,bill} of visible) {
+  if (!results.length) $('entries').textContent = 'Nenhum lançamento encontrado.';
+  for (const {entry,bill} of results) {
     const button = document.createElement('button');
     button.className = 'entry';
     const detail = document.createElement('span');
     detail.textContent = entry.name;
     const subtitle = document.createElement('small');
-    subtitle.textContent = [entry.bank, entry.date.split('-').reverse().join('/'), entry.count ? bill.part + '/' + entry.count : 'Parcelamento pendente'].join(' · ');
+    subtitle.textContent = [categoryOf(entry), entry.bank, entry.date.split('-').reverse().join('/'), entry.count ? bill.part + '/' + entry.count : 'Parcelamento pendente'].join(' · ');
     detail.append(subtitle);
     const value = document.createElement('b');
     value.textContent = brl(bill.cents);
@@ -60,6 +103,8 @@ function edit(entry) {
   fields.amount.value = entry.cents == null ? '' : (entry.cents/100).toFixed(2);
   fields.count.value = entry.count ?? '';
   fields.part.value = entry.part || 1;
+  initialCategory = entry.id ? entry.category || '' : suggestCategory(entry.name || '');
+  fields.category.value = initialCategory;
   fields.part.setCustomValidity('');
   $('amount-label').textContent = entry.statementValue ? 'Valor da parcela (R$)' : 'Valor total da compra (R$)';
   updateMatch();
@@ -67,7 +112,7 @@ function edit(entry) {
 }
 
 function draft() {
-  return {...editing,name:fields.name.value.trim(),bank:fields.bank.value,date:fields.date.value,month:fields.month.value,
+  return {...editing,name:fields.name.value.trim(),bank:fields.bank.value,category:fields.category.value,date:fields.date.value,month:fields.month.value,
     cents:Math.round(Number(fields.amount.value)*100),count:Number(fields.count.value)||null,part:Number(fields.part.value)};
 }
 function updateMatch() {
@@ -104,9 +149,10 @@ form.onsubmit = event => {
   entry.id = entry.id || (existing ? existing.id : crypto.randomUUID());
   const previous = current.find(row => row.id === entry.id);
   entry.updatedAt = Math.max(Date.now(), (previous?.updatedAt || 0) + 1);
+  if (existing?.category && entry.category === initialCategory) entry.category = existing.category;
   // Preserve the start of an already confirmed installment series.
   const saved = existing?.count && existing.statementValue && existing.part < entry.part && existing.count === entry.count && existing.cents === entry.cents
-    ? existing : entry;
+    ? {...existing, category:entry.category, updatedAt:entry.updatedAt} : entry;
   const next = [...current.filter(row => row.id !== entry.id),saved];
   try {localStorage.setItem(storageKey,JSON.stringify(next));}
   catch { $('match').textContent = 'Falha ao salvar no aparelho. Tente novamente.'; return; }
@@ -156,6 +202,8 @@ $('sync-form').onsubmit = async event => {
 $('month').value = localDate.slice(0,7);
 $('month').onchange = () => {$('month').value ||= localDate.slice(0,7); render();};
 $('filter').onchange = render;
+$('category-filter').onchange = render;
+$('search').oninput = render;
 $('add').onclick = () => edit({});
 $('close').onclick = () => $('editor').close();
 $('read').onclick = () => {

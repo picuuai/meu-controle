@@ -10,6 +10,11 @@
 <div id="receipt"></div>
 <label>Texto do alerta <textarea id="notice" rows="3" placeholder="Cole o texto da compra"></textarea></label>
 <button id="read">Revisar alerta</button><button id="native" hidden>Ativar notificações do Android</button>
-<p id="status" role="status"></p><div id="review"></div></section></div></main>
+<p id="status" role="status"></p><div id="review"></div></section></div>
+<section class="panel"><details><summary>Sincronização com GitHub</summary>
+<form id="sync-form" autocomplete="off"><p>O token fica disponível enquanto esta página estiver aberta.</p>
+<label>Token do GitHub<input id="sync-token" type="password" autocomplete="off" spellcheck="false"></label>
+<button id="sync-button" type="submit">Sincronizar agora</button><p id="sync-status" role="status"></p></form>
+</details></section></main>
 <dialog id="editor"><form id="form"><h2>Revisar compra</h2><label>Descrição<input name="name" required maxlength="150"></label><label>Cartão<select name="bank"><option>Itaú</option><option>CAIXA</option></select></label><div class="pair"><label>Data da compra<input name="date" type="date" required></label><label>Mês desta cobrança<input name="month" type="month" required></label></div><label id="amount-label">Valor (R$)</label><input aria-labelledby="amount-label" name="amount" type="number" step=".01" required><div class="pair"><label>Total de parcelas<input name="count" type="number" min="1" max="120" placeholder="Pendente"></label><label>Parcela desta cobrança<input name="part" type="number" min="1" max="120" value="1" required></label></div><p id="match"></p><div class="actions"><button type="button" id="close">Cancelar</button><button type="submit">Salvar compra</button></div></form></dialog>
 <script type="module" src="./app.mjs"></script></body></html>

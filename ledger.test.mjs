@@ -44,9 +44,15 @@ test('lote preserva compras idênticas e ignora as mesmas linhas ao reimportar',
   const second = importStatementRows(first.entries, rows, allocate, 2);
   assert.equal(second.added, 1);
   assert.equal(second.duplicates, 1);
+  assert.deepEqual([...second.alreadyRecorded], [rows[1]]);
   const repeated = importStatementRows(second.entries, rows, allocate, 3);
   assert.deepEqual(repeated.entries, second.entries);
   assert.equal(repeated.duplicates, 2);
+  const legacy = {...first.entries[0], statementKey: undefined};
+  const visible = importStatementRows([legacy], rows, allocate, 4);
+  assert.deepEqual([...visible.alreadyRecorded], [rows[0]]);
+  const selected = importStatementRows([legacy], rows, allocate, 4, new Set([rows[1]]));
+  assert.equal(selected.added, 1);
 });
 
 test('lote concilia uma compra confirmada e deixa conflitos para revisão', () => {

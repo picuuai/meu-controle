@@ -13,12 +13,49 @@ export function parseNotice(text) {
 
 const toCents = value => Math.round(Number(value.replaceAll('.', '').replace(',', '.')) * 100);
 
+export function statementTextRows(items, pageWidth, bank) {
+  const rows = [];
+  for (const item of items) {
+    if (!item.str?.trim()) continue;
+    const [, , , , x, y] = item.transform;
+    const row = rows.find(candidate => Math.abs(y - candidate.y) < 2);
+    const word = {x, end: x + item.width, text: item.str.trim()};
+    if (row) row.words.push(word);
+    else rows.push({y, words: [word]});
+  }
+  rows.sort((a, b) => b.y - a.y);
+  const layout = bank === 'Itaú' ? {split: .57, dates: [.22, .59], totals: [.56, .93]}
+    : bank === 'CAIXA' ? {split: .5, dates: [.06, .52], totals: [.49, .95], cities: [.25, .715]} : null;
+  if (!layout) return rows.map(row => row.words.sort((a, b) => a.x - b.x).map(word => word.text).join(' '));
+
+  const lines = [];
+  for (const {words} of rows) {
+    words.sort((a, b) => a.x - b.x);
+    for (const column of [0, 1]) {
+      const region = words.filter(word => Number(word.x / pageWidth >= layout.split) === column);
+      const dateIndex = region.findIndex(word =>
+        /^\d{2}\s*\/\s*\d{2}(?!\d)/.test(word.text) && Math.abs(word.x / pageWidth - layout.dates[column]) < .028);
+      if (dateIndex < 0) continue;
+      const amountIndex = region.findLastIndex(word =>
+        /[\d.]+,\s*\d{2}\s*[CD]?$/i.test(word.text) && Math.abs(word.end / pageWidth - layout.totals[column]) < .035);
+      if (amountIndex < dateIndex) continue;
+      const suffix = region[amountIndex + 1];
+      const end = bank === 'CAIXA' && suffix && /^[CD]$/i.test(suffix.text) ? amountIndex + 2 : amountIndex + 1;
+      const description = region.slice(dateIndex, amountIndex).filter(word =>
+        !layout.cities || word.x / pageWidth < layout.cities[column]);
+      const amount = region.slice(amountIndex, end);
+      lines.push([...description, ...amount].map(word => word.text).join(' '));
+    }
+  }
+  return lines;
+}
+
 export function parseStatement(lines, month, bank) {
   return lines.flatMap(line => {
-    const row = line.match(/^\s*(\d{2})\s*\/\s*(\d{2})(?:\s*\/\s*(\d{4}|\d{2}))?\s+(.+?)\s+(?:R\s*\$\s*)?([-−]?\s*[\d.]+,\s*\d{2})\s*$/);
+    const row = line.match(/^\s*(\d{2})\s*\/\s*(\d{2})(?:\s*\/\s*(\d{4}|\d{2}))?(?:\s+|(?=[\p{L}*]))(.+?)\s+(?:R\s*\$\s*)?([-−]?\s*[\d.]+,\s*\d{2})\s*([CD])?\s*$/iu);
     if (!row) return [];
-    const [,day, dateMonth, year, description, value] = row;
-    if (/pagamento (?:de|da|efetuado)|saldo anterior|total da fatura/i.test(description)) return [];
+    const [,day, dateMonth, year, description, value, direction] = row;
+    if (/pagto\.?|pagamento (?:de|da|efetuado)|saldo anterior|total da fatura/i.test(description)) return [];
     const marker = description.match(/(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})\s*\/\s*(\d{1,3})\s*$/i);
     const part = Number(marker?.[1]) || 1;
     const count = Number(marker?.[2]) || null;
@@ -28,7 +65,8 @@ export function parseStatement(lines, month, bank) {
     const parsed = new Date(date + 'T00:00Z');
     if (Number.isNaN(+parsed) || parsed.toISOString().slice(0,10) !== date) return [];
     const name = (marker ? description.slice(0, marker.index) : description).trim();
-    const cents = toCents(value.replaceAll(/\s/g, '').replace('−', '-'));
+    const amount = toCents(value.replaceAll(/\s/g, '').replace('−', '-'));
+    const cents = direction?.toUpperCase() === 'C' ? -Math.abs(amount) : amount;
     return name ? [{name, date, bank, month, cents, count, part, source:'pdf', statementValue:true}] : [];
   });
 }

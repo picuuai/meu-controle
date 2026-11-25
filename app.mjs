@@ -21,9 +21,40 @@ let statementRows = [];
 let editing;
 let initialCategory;
 let lastDeletion;
+let entryPage = 1;
+const entriesPerPage = 20;
+const views = {painel:'Painel', lancamentos:'Lançamentos', faturas:'Faturas', alertas:'Alertas', configuracoes:'Configurações'};
+const periodFormat = new Intl.DateTimeFormat('pt-BR', {month:'long', year:'numeric'});
 
 for (const category of categories) fields.category.add(new Option(category, category));
 for (const category of [...categories, uncategorized]) $('category-filter').add(new Option(category, category));
+
+function showView() {
+  const requested = location.hash.slice(1);
+  const view = Object.hasOwn(views, requested) ? requested : 'painel';
+  for (const section of document.querySelectorAll('[data-view]')) section.hidden = section.dataset.view !== view;
+  for (const link of document.querySelectorAll('[data-view-link]')) {
+    if (link.dataset.viewLink === view) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+  $('app-filters').hidden = view === 'alertas' || view === 'configuracoes';
+  $('app-card-filter').hidden = $('app-category-filter').hidden = view === 'faturas';
+  document.title = view === 'painel' ? 'Meu Controle' : views[view] + ' · Meu Controle';
+}
+
+window.addEventListener('hashchange', () => {
+  showView();
+  window.scrollTo(0, 0);
+});
+
+function openEntries(filter, value) {
+  $(filter).value = value;
+  $('search').value = '';
+  $('entry-state').value = '';
+  entryPage = 1;
+  render();
+  location.hash = 'lancamentos';
+}
 
 function paymentLabel(entry, part = entry.part) {
   const count = installmentCount(entry);
@@ -31,7 +62,7 @@ function paymentLabel(entry, part = entry.part) {
   return count === 1 ? 'À vista' : part + '/' + count;
 }
 
-function drawBars(id, series) {
+function drawBars(id, series, filter) {
   const chart = $(id);
   chart.replaceChildren();
   const max = Math.max(0, ...series.map(([, cents]) => Math.abs(cents)));
@@ -44,7 +75,10 @@ function drawBars(id, series) {
   for (const [label, cents] of series) {
     const item = document.createElement('li');
     const caption = document.createElement('div');
-    const name = document.createElement('span');
+    const name = document.createElement('button');
+    name.type = 'button';
+    name.className = 'chart-filter';
+    name.onclick = () => openEntries(filter, label);
     const amount = document.createElement('strong');
     name.textContent = label;
     amount.textContent = brl(cents);
@@ -53,12 +87,84 @@ function drawBars(id, series) {
     track.className = 'chart-track';
     track.setAttribute('aria-hidden', 'true');
     const bar = document.createElement('span');
-    bar.className = cents < 0 ? 'credit-bar' : '';
+    bar.className = cents < 0 ? 'credit-bar' : 'debit-bar';
     bar.style.width = (max ? Math.abs(cents) / max * 100 : 0) + '%';
     track.append(bar);
     item.append(caption, track);
     chart.append(item);
   }
+}
+
+function drawTrend(series, month) {
+  const chart = $('monthly-chart');
+  chart.replaceChildren();
+  const highest = Math.max(0, ...series.map(([, cents]) => cents));
+  const lowest = Math.max(0, ...series.map(([, cents]) => -cents));
+  const range = highest + lowest || 1;
+  const baseline = lowest / range * 100;
+  for (const [label, cents] of series) {
+    const [number, year] = label.split('/');
+    const period = year + '-' + number;
+    const item = document.createElement('li');
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'trend-month';
+    button.setAttribute('aria-pressed', String(period === month));
+    button.title = label + ' · ' + brl(cents);
+    button.setAttribute('aria-label', button.title);
+    button.onclick = () => {
+      $('month').value = period;
+      resetEntryPage();
+      $('monthly-chart').querySelector('[aria-pressed="true"]')?.focus();
+    };
+    const track = document.createElement('span');
+    track.className = 'trend-track';
+    track.style.setProperty('--baseline', baseline + '%');
+    track.setAttribute('aria-hidden', 'true');
+    const bar = document.createElement('span');
+    bar.className = 'trend-bar' + (cents < 0 ? ' credit-bar' : '');
+    bar.style.bottom = (cents < 0 ? baseline + cents / range * 100 : baseline) + '%';
+    bar.style.height = Math.abs(cents) / range * 100 + '%';
+    track.append(bar);
+    const caption = document.createElement('span');
+    caption.textContent = number + '/' + year.slice(-2);
+    button.append(track, caption);
+    item.append(button);
+    chart.append(item);
+  }
+}
+
+function renderBills(month) {
+  const bills = $('bill-cards');
+  bills.replaceChildren();
+  for (const option of $('bank').options) {
+    const bank = option.value;
+    const charges = entries.filter(entry => !entry.deleted && entry.bank === bank)
+      .map(entry => forMonth(entry, month)).filter(Boolean);
+    const card = document.createElement('section');
+    card.className = 'bill-card';
+    const heading = document.createElement('h2');
+    heading.textContent = bank;
+    const value = document.createElement('strong');
+    value.textContent = brl(charges.reduce((total, charge) => total + charge.cents, 0));
+    const count = document.createElement('small');
+    count.textContent = charges.length === 1 ? '1 lançamento no mês' : charges.length + ' lançamentos no mês';
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.textContent = 'Ver lançamentos';
+    action.setAttribute('aria-label', 'Ver lançamentos do cartão ' + bank);
+    action.onclick = () => {
+      $('category-filter').value = '';
+      openEntries('filter', bank);
+    };
+    card.append(heading, value, count, action);
+    bills.append(card);
+  }
+}
+
+function resetEntryPage() {
+  entryPage = 1;
+  render();
 }
 
 function render() {
@@ -70,6 +176,8 @@ function render() {
   const visible = selected.map(entry => ({entry, bill:forMonth(entry,month),
     forecast: Boolean(entry.projection) || entry.month < month})).filter(row => row.bill);
   visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
+  $('dashboard-period').textContent = periodFormat.format(new Date(month + '-15T12:00'));
+  $('shortcut-entry-count').textContent = visible.length === 1 ? '1 lançamento no mês' : visible.length + ' lançamentos no mês';
   $('total').textContent = brl(visible.reduce((sum,row) => sum + row.bill.cents,0));
   const projected = visible.filter(row => row.forecast);
   $('total-caption').textContent = !projected.length ? 'Total da fatura registrada'
@@ -81,16 +189,29 @@ function render() {
   $('future').textContent = brl(nextTotal);
   $('later-total').textContent = 'Após a próxima: ' + brl(laterTotal);
   $('pending').textContent = visible.filter(({entry}) => !installmentCount(entry)).length;
-  drawBars('category-chart', groupCharges(visible, categoryOf));
-  drawBars('card-chart', groupCharges(visible, entry => entry.bank));
-  drawBars('monthly-chart', monthlyCharges(selected, month));
+  drawBars('category-chart', groupCharges(visible, categoryOf), 'category-filter');
+  drawBars('card-chart', groupCharges(visible, entry => entry.bank), 'filter');
+  drawTrend(monthlyCharges(selected, month), month);
+  renderBills(month);
   const query = $('search').value.trim().toLocaleLowerCase('pt-BR');
-  const results = visible.filter(({entry}) => entry.name.toLocaleLowerCase('pt-BR').includes(query));
+  const state = $('entry-state').value;
+  const results = visible.filter(({entry}) => entry.name.toLocaleLowerCase('pt-BR').includes(query) &&
+    (!state || (Boolean(installmentCount(entry)) === (state === 'confirmed'))));
+  const pages = Math.max(1, Math.ceil(results.length / entriesPerPage));
+  entryPage = Math.min(entryPage, pages);
+  const start = (entryPage - 1) * entriesPerPage;
+  const pageRows = results.slice(start, start + entriesPerPage);
+  $('entry-page-status').textContent = results.length
+    ? 'Mostrando ' + (start + 1) + ' a ' + (start + pageRows.length) + ' de ' + results.length
+    : '';
+  $('entry-pagination').hidden = pages <= 1;
+  $('entry-previous').disabled = entryPage <= 1;
+  $('entry-next').disabled = entryPage >= pages;
   $('entries').replaceChildren();
   $('pending-entries').replaceChildren();
-  $('pending-section').hidden = !results.some(({entry}) => !installmentCount(entry));
+  $('pending-section').hidden = !pageRows.some(({entry}) => !installmentCount(entry));
   if (!results.length) $('entries').textContent = 'Nenhum lançamento encontrado.';
-  for (const {entry,bill,forecast} of results) {
+  for (const {entry,bill,forecast} of pageRows) {
     const card = document.createElement('div');
     card.className = 'entry-card';
     const header = document.createElement('div');
@@ -128,7 +249,13 @@ function render() {
 
 function review(refreshPdf = true) {
   $('review').replaceChildren();
-  for (const item of queue.filter(item => item.source !== 'pdf')) {
+  const alerts = queue.filter(item => item.source !== 'pdf');
+  $('nav-alert-count').textContent = alerts.length;
+  $('nav-alert-count').hidden = !alerts.length;
+  $('shortcut-alert-count').textContent = alerts.length ?
+    (alerts.length === 1 ? '1 aviso para revisar' : alerts.length + ' avisos para revisar') : 'Revisar avisos bancários e SMS';
+  if (!alerts.length) $('review').textContent = 'Nenhum alerta aguardando revisão.';
+  for (const item of alerts) {
     const button = document.createElement('button');
     button.className = 'entry';
     button.textContent = item.name + ' · ' + (item.cents == null ? 'Valor pendente' : brl(item.cents)) +
@@ -265,7 +392,7 @@ $('save-pdf').onclick = () => {
   $('filter').value = rows[0].bank;
   $('category-filter').value = '';
   $('search').value = '';
-  render();
+  resetEntryPage();
   review();
   $('status').textContent = [
     result.added + ' novos lançamentos',
@@ -492,11 +619,20 @@ $('sync-form').onsubmit = async event => {
 };
 
 $('month').value = localDate.slice(0,7);
-$('month').onchange = () => {$('month').value ||= localDate.slice(0,7); render();};
-$('filter').onchange = render;
-$('category-filter').onchange = render;
-$('search').oninput = render;
+$('month').onchange = () => {$('month').value ||= localDate.slice(0,7); resetEntryPage();};
+$('filter').onchange = resetEntryPage;
+$('category-filter').onchange = resetEntryPage;
+$('entry-state').onchange = resetEntryPage;
+$('search').oninput = resetEntryPage;
 $('add').onclick = () => edit({});
+$('add-entry').onclick = () => edit({});
+for (const [id, change] of [['entry-previous', -1], ['entry-next', 1]]) {
+  $(id).onclick = () => {
+    entryPage += change;
+    render();
+    $('entry-page-status').scrollIntoView({block:'start'});
+  };
+}
 $('close').onclick = () => $('editor').close();
 
 function queueSms(rows) {
@@ -733,11 +869,15 @@ if (window.AndroidAlerts) {
       if (!message) break;
       shared.push(...parseSmsText(message, localDate));
     }
-    if (shared.length) queueSms(shared);
+    if (shared.length) {
+      queueSms(shared);
+      location.hash = 'alertas';
+    }
     if (!$('editor').open && !$('pair-pin-dialog').open) {
       const code = window.AndroidAlerts.takePairingCode?.();
       if (code) {
         scannedPairing = code;
+        location.hash = 'configuracoes';
         $('sync-form').closest('details').open = true;
         $('pair-pin-dialog').showModal();
       }
@@ -789,4 +929,6 @@ if (window.AndroidAlerts) {
   };
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.warn);
 }
+showView();
 render();
+review();

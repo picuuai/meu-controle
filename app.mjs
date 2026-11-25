@@ -573,9 +573,19 @@ if (window.AndroidAlerts) {
   $('native').onclick = () => window.AndroidAlerts.openSettings();
   const refresh = () => {
     const enabled = window.AndroidAlerts.enabled?.();
-    $('native-status').textContent = enabled
-      ? 'Acesso ativado. Alertas dos bancos e notificações de compra do SMS 29194 aparecem abaixo para revisão.'
-      : 'Autorize Meu Controle nas configurações do Android para receber alertas.';
+    const connected = enabled && (window.AndroidAlerts.connected?.() ?? true);
+    $('native').textContent = enabled ? 'Gerenciar acesso às notificações' : 'Ativar acesso às notificações';
+    $('native-status').textContent = connected
+      ? 'Acesso ativado. Alertas dos bancos e avisos de compra do SMS 29194 aparecem para revisão.'
+      : enabled ? 'Acesso concedido. Aguardando conexão do Android.'
+        : 'Acesso desativado. Autorize o Meu Controle nas configurações do Android.';
+    if (!$('editor').open) {
+      const message = window.AndroidAlerts.takeSharedMessage?.();
+      if (message) {
+        $('notice').value = message;
+        $('read').click();
+      }
+    }
     const alerts = JSON.parse(window.AndroidAlerts.pending());
     queue = [...queue.filter(row => !row.nativeKey), ...alerts.filter(alert => !entries.some(entry => entry.nativeKey === alert.key)).map(alert => {
       const parsed = parseNotice(alert.text, alert.date);
@@ -585,6 +595,10 @@ if (window.AndroidAlerts) {
     review(false);
   };
   window.addEventListener('focus',refresh);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refresh();
+  });
+  $('native-sms-help').hidden = false;
   setInterval(refresh,2500);
   refresh();
 } else {

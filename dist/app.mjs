@@ -237,7 +237,8 @@ function drawTrend(series, month) {
 function renderBills(month) {
   const bills = $('bill-cards');
   bills.replaceChildren();
-  for (const bank of activeCards) {
+  const cards = [...new Set([...activeCards, ...historicCards()])];
+  for (const bank of cards) {
     const charges = entries.filter(entry => !entry.deleted && entry.bank === bank)
       .map(entry => forMonth(entry, month)).filter(Boolean);
     const card = document.createElement('section');
@@ -767,7 +768,12 @@ $('sync-form').onsubmit = async event => {
   }
 };
 
-$('month').value = localDate.slice(0,7);
+const lastEntryMonth = entries.filter(entry => !entry.deleted && /^\d{4}-\d{2}$/.test(entry.month))
+  .reduce((latest, entry) => entry.month > latest ? entry.month : latest, '');
+const lastClosedBill = Object.values(closedBills).filter(bill => bill.closed)
+  .reduce((latest, bill) => bill.month > latest ? bill.month : latest, '');
+const focusMonth = [lastEntryMonth, lastClosedBill].filter(Boolean).sort().at(-1) || localDate.slice(0,7);
+$('month').value = lastClosedBill === focusMonth ? monthAfter(focusMonth) : focusMonth;
 $('month').onchange = () => {$('month').value ||= localDate.slice(0,7); resetEntryPage();};
 $('filter').onchange = resetEntryPage;
 $('category-filter').onchange = resetEntryPage;

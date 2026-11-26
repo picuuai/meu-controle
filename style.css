@@ -109,6 +109,10 @@ html[data-theme=dark] .danger-action {color: #ffaaa0}
 .quick-links a {display: grid; gap: 5px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); color: var(--ink); text-decoration: none}
 .quick-links a:hover, .quick-links a:focus-visible {border-color: #278567}
 .quick-links small {line-height: 1.35}
+.bill-card {display:grid;align-content:start;gap:10px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--paper)}
+.bill-card h2,.bill-card p {margin:0}
+.bill-state {color:var(--muted);font-weight:700}
+.bill-state.is-closed {color:#277254}
 .analytics {grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); align-items: start}
 .analytics-cards {grid-column: 1 / -1}
 .analytics-cards .chart {grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px}

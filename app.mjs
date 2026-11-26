@@ -1,7 +1,7 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
   identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate,
-  statementReferenceMonth, monthAfter} from './ledger.mjs?v=21';
-import {mergeEntries, syncEntries} from './sync.mjs?v=13';
+  statementReferenceMonth, monthAfter} from './ledger.mjs?v=22';
+import {mergeEntries, mergeClosedBills, syncEntries} from './sync.mjs?v=14';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=21';
 import {parseSmsText, parseSmsBackup, smsKey} from './sms.mjs?v=24';
 import {createPairing, readPairing} from './pairing.mjs?v=24';
@@ -15,6 +15,7 @@ const fields = form.elements;
 const storageKey = 'meu-controle-ledger';
 const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
 const cardStorageKey = 'meu-controle-active-cards';
+const billStatusStorageKey = 'meu-controle-closed-bills';
 const defaultCards = ['Itaú', 'CAIXA'];
 const cardKey = name => name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
 function readCards() {
@@ -26,6 +27,14 @@ function readCards() {
 }
 let entries = readEntries();
 let activeCards = readCards();
+function readClosedBills() {
+  try {
+    const value = JSON.parse(localStorage.getItem(billStatusStorageKey) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+let closedBills = readClosedBills();
+const billStatusKey = (bank, month) => bank + '|' + month;
 let readingPdf = false;
 let queue = [];
 const selectedPdf = new Set();
@@ -112,9 +121,10 @@ $('card-form').onsubmit = event => {
 };
 
 window.addEventListener('storage', event => {
-  if (event.key !== cardStorageKey && event.key !== storageKey) return;
+  if (event.key !== cardStorageKey && event.key !== storageKey && event.key !== billStatusStorageKey) return;
   activeCards = readCards();
   entries = readEntries();
+  closedBills = readClosedBills();
   renderCardSettings();
   render();
 });
@@ -227,7 +237,8 @@ function drawTrend(series, month) {
 function renderBills(month) {
   const bills = $('bill-cards');
   bills.replaceChildren();
-  for (const bank of activeCards) {
+  const cards = [...new Set([...activeCards, ...historicCards()])];
+  for (const bank of cards) {
     const charges = entries.filter(entry => !entry.deleted && entry.bank === bank)
       .map(entry => forMonth(entry, month)).filter(Boolean);
     const card = document.createElement('section');
@@ -238,6 +249,15 @@ function renderBills(month) {
     value.textContent = brl(charges.reduce((total, charge) => total + charge.cents, 0));
     const count = document.createElement('small');
     count.textContent = charges.length === 1 ? '1 lançamento no mês' : charges.length + ' lançamentos no mês';
+    const closed = Boolean(closedBills[billStatusKey(bank, month)]?.closed);
+    const state = document.createElement('p');
+    state.className = 'bill-state' + (closed ? ' is-closed' : '');
+    state.textContent = closed ? 'Fatura fechada' : 'Fatura em aberto';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = closed ? 'Reabrir fatura' : 'Marcar como fechada';
+    toggle.setAttribute('aria-label', (closed ? 'Reabrir' : 'Fechar') + ' fatura ' + bank + ' de ' + month);
+    toggle.onclick = () => setBillClosed(bank, month, !closed);
     const action = document.createElement('button');
     action.type = 'button';
     action.textContent = 'Ver lançamentos';
@@ -246,9 +266,30 @@ function renderBills(month) {
       $('category-filter').value = '';
       openEntries('filter', bank);
     };
-    card.append(heading, value, count, action);
+    card.append(heading, value, count, state, toggle, action);
     bills.append(card);
   }
+}
+
+function setBillClosed(bank, month, closed) {
+  const key = billStatusKey(bank, month);
+  const now = Date.now();
+  const next = {...closedBills, [key]: {bank, month, closed, updatedAt:now}};
+  try {localStorage.setItem(billStatusStorageKey, JSON.stringify(next));}
+  catch {
+    $('bill-status').textContent = 'Não foi possível salvar o fechamento neste aparelho.';
+    return;
+  }
+  closedBills = next;
+  if (closed) {
+    const nextMonth = monthAfter(month);
+    $('month').value = nextMonth;
+    $('bill-status').textContent = 'Fatura ' + bank + ' fechada. Exibindo ' + nextMonth.split('-').reverse().join('/') + '.';
+    render();
+    return;
+  }
+  $('bill-status').textContent = 'Fatura reaberta.';
+  renderBills(month);
 }
 
 function resetEntryPage() {
@@ -265,7 +306,9 @@ function render() {
     !entry.deleted && (!card || entry.bank === card) && (!category || categoryOf(entry) === category));
   const visible = selected.map(entry => ({entry, bill:forMonth(entry,month),
     forecast: Boolean(entry.projection) || entry.month < month})).filter(row => row.bill);
-  visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
+  visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date) ||
+    (b.entry.time || '').localeCompare(a.entry.time || '') ||
+    (b.entry.updatedAt || 0) - (a.entry.updatedAt || 0));
   $('dashboard-period').textContent = periodFormat.format(new Date(month + '-15T12:00'));
   $('shortcut-entry-count').textContent = visible.length === 1 ? '1 lançamento no mês' : visible.length + ' lançamentos no mês';
   $('total').textContent = brl(visible.reduce((sum,row) => sum + row.bill.cents,0));
@@ -349,14 +392,16 @@ function review(refreshPdf = true) {
     const button = document.createElement('button');
     button.className = 'entry';
     button.textContent = item.name + ' · ' + (item.cents == null ? 'Valor pendente' : brl(item.cents)) +
-      (item.date ? ' · ' + item.date.split('-').reverse().join('/') : '') + ' · ' + paymentLabel(item);
+      (item.date ? ' · ' + item.date.split('-').reverse().join('/') : '') + ' · ' + paymentLabel(item) +
+      (item.confirmationPending ? ' · Confirmar compra' : '');
     button.onclick = () => edit(item);
     $('review').append(button);
   }
   if (!refreshPdf) return;
   $('pdf-rows').replaceChildren();
   const pdfRows = queue.filter(item => item.source === 'pdf').sort((a, b) =>
-    a.month.localeCompare(b.month) || Number(Boolean(installmentCount(a))) - Number(Boolean(installmentCount(b))));
+    b.month.localeCompare(a.month) || b.date.localeCompare(a.date) ||
+    Number(Boolean(installmentCount(a))) - Number(Boolean(installmentCount(b))));
   $('pdf-review').hidden = !pdfRows.length;
   const selectionChanged = () => {
     const total = pdfRows.filter(item => selectedPdf.has(item)).length;
@@ -700,15 +745,19 @@ $('sync-form').onsubmit = async event => {
   $('sync-button').disabled = true;
   status.textContent = 'Sincronizando…';
   try {
-    const synced = await syncEntries(syncToken, readEntries);
+    const synced = await syncEntries(syncToken, readEntries, readClosedBills);
     const current = readEntries();
-    const next = mergeEntries(synced, current);
+    const next = mergeEntries(synced.entries, current);
+    const nextClosedBills = mergeClosedBills(synced.closedBills, readClosedBills());
     localStorage.setItem(storageKey, JSON.stringify(next));
+    localStorage.setItem(billStatusStorageKey, JSON.stringify(nextClosedBills));
     entries = next;
+    closedBills = nextClosedBills;
     render();
-    status.textContent = next.length === synced.length &&
-      next.every((entry, index) => entry === synced[index])
-      ? 'Lançamentos sincronizados.'
+    status.textContent = next.length === synced.entries.length &&
+      next.every((entry, index) => entry === synced.entries[index]) &&
+      JSON.stringify(nextClosedBills) === JSON.stringify(synced.closedBills)
+      ? 'Lançamentos e fechamentos sincronizados.'
       : 'Há alterações locais mais recentes. Sincronize novamente para enviá-las.';
   } catch (error) {
     status.textContent = error instanceof TypeError
@@ -719,7 +768,12 @@ $('sync-form').onsubmit = async event => {
   }
 };
 
-$('month').value = localDate.slice(0,7);
+const lastEntryMonth = entries.filter(entry => !entry.deleted && /^\d{4}-\d{2}$/.test(entry.month))
+  .reduce((latest, entry) => entry.month > latest ? entry.month : latest, '');
+const lastClosedBill = Object.values(closedBills).filter(bill => bill.closed)
+  .reduce((latest, bill) => bill.month > latest ? bill.month : latest, '');
+const focusMonth = [lastEntryMonth, lastClosedBill].filter(Boolean).sort().at(-1) || localDate.slice(0,7);
+$('month').value = lastClosedBill === focusMonth ? monthAfter(focusMonth) : focusMonth;
 $('month').onchange = () => {$('month').value ||= localDate.slice(0,7); resetEntryPage();};
 $('filter').onchange = resetEntryPage;
 $('category-filter').onchange = resetEntryPage;
@@ -751,7 +805,8 @@ function queueSms(rows) {
     const key = smsKey(row);
     if (seen.has(key)) continue;
     seen.add(key);
-    queue.push({...row, month:row.date.slice(0, 7), category:suggestCategory(row.name, prior), source:'alert'});
+    queue.push({...row, count:row.count || 1, part:row.part || 1, month:row.date.slice(0, 7),
+      category:suggestCategory(row.name, prior), confirmationPending:true, source:'alert'});
     added++;
   }
   const skipped = rows.length - added;
@@ -802,23 +857,30 @@ const dropZone = $('pdf-drop');
 const pickPdf = $('pick-pdf');
 pickPdf.onclick = () => pdfInput.click();
 pdfInput.onchange = () => importPdf(pdfInput.files);
-dropZone.ondragover = event => {
-  if (!event.dataTransfer.types.includes('Files')) return;
+const hasFiles = event => Array.from(event.dataTransfer?.types || []).includes('Files');
+document.addEventListener('dragenter', event => {
+  if (!hasFiles(event)) return;
   event.preventDefault();
-  event.dataTransfer.dropEffect = pickPdf.disabled ? 'none' : 'copy';
+  dropZone.classList.add('dragging');
+});
+document.addEventListener('dragover', event => {
+  if (!hasFiles(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = pickPdf.disabled ? 'none' : 'copy';
   dropZone.classList.toggle('dragging', !pickPdf.disabled);
-};
-dropZone.ondragleave = event => {
-  if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove('dragging');
-};
-dropZone.ondrop = event => {
+});
+document.addEventListener('dragleave', event => {
+  if (hasFiles(event) && !event.relatedTarget) dropZone.classList.remove('dragging');
+});
+document.addEventListener('drop', event => {
+  if (!hasFiles(event)) return;
   event.preventDefault();
   dropZone.classList.remove('dragging');
   importPdf(event.dataTransfer.files);
-};
+});
 
 async function importPdf(files) {
-  if (!files.length || pickPdf.disabled) return;
+  if (!files?.length || pickPdf.disabled) return;
   const status = $('status');
   $('pdf-bank-forecast').hidden = true;
   const [file] = files;

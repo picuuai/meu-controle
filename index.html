@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=26"><title>Meu Controle</title></head><body>
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#122b24"><link rel="manifest" href="./manifest.webmanifest"><link rel="apple-touch-icon" href="./icon-192.png"><link rel="stylesheet" href="./style.css?v=32"><title>Meu Controle</title></head><body>
 <header class="app-header">
   <a class="brand" href="#painel"><img src="./icon-192.png" alt="" width="32" height="32">Meu Controle</a>
   <a class="settings-link" href="#configuracoes" data-view-link="configuracoes">Configurações</a>
@@ -58,12 +58,14 @@
 
   <section data-view="faturas" aria-labelledby="bills-title" hidden>
     <div class="view-header"><h1 id="bills-title">Faturas</h1></div>
+    <p>Feche cada fatura por cartão. Ao abrir o app, ele mostra o mês mais recente com lançamentos.</p>
+    <p id="bill-status" role="status"></p>
     <div id="bill-cards" class="bill-cards"></div>
     <section class="panel import-panel"><h2>Importar fatura</h2>
       <label>Cartão de origem <select id="bank"></select></label>
       <p id="no-active-cards" hidden>Cadastre um cartão para importar uma fatura. <a href="#configuracoes">Gerenciar cartões</a></p>
-      <div class="pdf-drop" id="pdf-drop">
-        <p>Arraste o PDF da fatura para cá</p>
+      <div class="pdf-drop" id="pdf-drop" aria-label="Área para importar uma fatura PDF">
+        <p>Solte um PDF da fatura aqui ou em qualquer área do app</p>
         <button id="pick-pdf" type="button">Escolher PDF</button>
         <input id="pdf" type="file" accept="application/pdf,.pdf" hidden>
       </div>
@@ -116,7 +118,7 @@
         <button id="get-update" type="button" hidden>Baixar atualização</button><p id="update-status" role="status"></p></div>
     </section>
     <section class="panel settings-sync"><details><summary>Sincronização com GitHub</summary>
-      <form id="sync-form" autocomplete="off"><p>O token fica disponível enquanto esta página estiver aberta.</p>
+      <form id="sync-form" autocomplete="off"><p>Sincroniza lançamentos e fechamento individual por cartão e mês. O token fica disponível enquanto esta página estiver aberta.</p>
         <label>Token do GitHub<input id="sync-token" type="password" autocomplete="off" spellcheck="false"></label>
         <button id="sync-button" type="submit">Sincronizar agora</button><p id="sync-status" role="status"></p>
       </form>
@@ -146,4 +148,4 @@
 <div class="actions"><button id="pair-pin-close" type="button">Cancelar</button><button type="submit">Parear e sincronizar</button></div>
 </form></dialog>
 <script src="./qrcode.js" defer></script>
-<script type="module" src="./app.mjs?v=26"></script></body></html>
+<script type="module" src="./app.mjs?v=32"></script></body></html>

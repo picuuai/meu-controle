@@ -111,9 +111,20 @@ export function statementTextRows(items, pageWidth, bank, section = {}) {
     else rows.push({y, words: [word]});
   }
   rows.sort((a, b) => b.y - a.y);
-  const layout = bank === 'Itaú' ? {split: .57, dates: [.22, .59], totals: [.56, .93]}
+  let layout = bank === 'Itaú' ? {split: .57, dates: [.22, .59], totals: [.56, .93]}
     : bank === 'CAIXA' ? {split: .5, dates: [.06, .52], totals: [.49, .95], cities: [.25, .715]} : null;
   if (!layout) return rows.map(row => row.words.sort((a, b) => a.x - b.x).map(word => word.text).join(' '));
+
+  if (bank === 'CAIXA') {
+    const transactions = rows.map(row => {
+      const date = row.words.find(word => /^\d{2}\s*\/\s*\d{2}(?!\d)/.test(word.text));
+      const amount = row.words.find(word => /^[\d.]+,\s*\d{2}\s*[CD]?$/i.test(word.text));
+      return date && amount ? {date: date.x / pageWidth, amount: amount.end / pageWidth} : null;
+    }).filter(Boolean);
+    const singleColumn = transactions.length >= 3 &&
+      transactions.every(row => row.date < .1 && row.amount > .68 && row.amount < .85);
+    if (singleColumn) layout = {split: 1, dates: [.06], totals: [.8]};
+  }
 
   const lines = [];
   const forecast = [Boolean(section.nextBill), false];
@@ -138,7 +149,7 @@ export function statementTextRows(items, pageWidth, bank, section = {}) {
         /^\d{2}\s*\/\s*\d{2}(?!\d)/.test(word.text) && Math.abs(word.x / pageWidth - layout.dates[column]) < .028);
       if (dateIndex < 0) continue;
       const amountIndex = region.findLastIndex(word =>
-        /[\d.]+,\s*\d{2}\s*[CD]?$/i.test(word.text) && Math.abs(word.end / pageWidth - layout.totals[column]) < .035);
+        /[\d.]+,\s*\d{2}\s*[CD]?$/i.test(word.text) && Math.abs(word.end / pageWidth - layout.totals[column]) < .06);
       if (amountIndex < dateIndex) continue;
       const suffix = region[amountIndex + 1];
       const end = bank === 'CAIXA' && suffix && /^[CD]$/i.test(suffix.text) ? amountIndex + 2 : amountIndex + 1;
@@ -202,7 +213,7 @@ export function charge(entry, part) {
 }
 
 const monthNumber = month => Number(month.slice(0,4)) * 12 + Number(month.slice(5)) - 1;
-const installmentMarker = /(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})(?:\s*\/\s*|\s+d\s*e\s+)(\d{1,3})\s*$/i;
+const installmentMarker = /(?:\b(?:parc(?:ela)?\.?)\s*)?(\d{1,3})(?:\s*\/\s*|\s+d\s*e\s+|\s+)(\d{1,3})\s*$/i;
 const incompleteInstallment = /\b(\d{1,3})(?:\s*\/|\s+d(?:\s*e)?)\s*$/i;
 
 export function installmentCount(entry) {

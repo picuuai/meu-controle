@@ -305,7 +305,9 @@ function render() {
     !entry.deleted && (!card || entry.bank === card) && (!category || categoryOf(entry) === category));
   const visible = selected.map(entry => ({entry, bill:forMonth(entry,month),
     forecast: Boolean(entry.projection) || entry.month < month})).filter(row => row.bill);
-  visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date));
+  visible.sort((a,b) => b.entry.date.localeCompare(a.entry.date) ||
+    (b.entry.time || '').localeCompare(a.entry.time || '') ||
+    (b.entry.updatedAt || 0) - (a.entry.updatedAt || 0));
   $('dashboard-period').textContent = periodFormat.format(new Date(month + '-15T12:00'));
   $('shortcut-entry-count').textContent = visible.length === 1 ? '1 lançamento no mês' : visible.length + ' lançamentos no mês';
   $('total').textContent = brl(visible.reduce((sum,row) => sum + row.bill.cents,0));
@@ -397,7 +399,8 @@ function review(refreshPdf = true) {
   if (!refreshPdf) return;
   $('pdf-rows').replaceChildren();
   const pdfRows = queue.filter(item => item.source === 'pdf').sort((a, b) =>
-    a.month.localeCompare(b.month) || Number(Boolean(installmentCount(a))) - Number(Boolean(installmentCount(b))));
+    b.month.localeCompare(a.month) || b.date.localeCompare(a.date) ||
+    Number(Boolean(installmentCount(a))) - Number(Boolean(installmentCount(b))));
   $('pdf-review').hidden = !pdfRows.length;
   const selectionChanged = () => {
     const total = pdfRows.filter(item => selectedPdf.has(item)).length;

@@ -262,7 +262,11 @@ export function candidates(entries, incoming) {
   return entries.filter(entry => {
     if (entry.deleted || entry.bank !== incoming.bank || entry.date !== incoming.date || normalized(entry.name) !== name) return false;
     const existing = forMonth(entry, incoming.month);
-    return existing?.cents === incoming.cents ||
+    const alertWasAssumedCash = incoming.count > 1 && entry.source === 'alert' && entry.count === 1 &&
+      entry.month <= incoming.month &&
+      (entry.cents === incoming.cents ||
+        Math.abs(entry.cents - incoming.count * incoming.cents) <= incoming.count);
+    return existing?.cents === incoming.cents || alertWasAssumedCash ||
       (incoming.count && !entry.count && Math.abs(entry.cents - incoming.count * incoming.cents) <= incoming.count);
   });
 }

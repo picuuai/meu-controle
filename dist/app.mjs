@@ -1,7 +1,7 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
   identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate,
   statementReferenceMonth, monthAfter} from './ledger.mjs?v=21';
-import {mergeEntries, syncEntries} from './sync.mjs?v=13';
+import {mergeEntries, mergeClosedBills, syncEntries} from './sync.mjs?v=14';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=21';
 import {parseSmsText, parseSmsBackup, smsKey} from './sms.mjs?v=24';
 import {createPairing, readPairing} from './pairing.mjs?v=24';
@@ -15,6 +15,7 @@ const fields = form.elements;
 const storageKey = 'meu-controle-ledger';
 const readEntries = () => JSON.parse(localStorage.getItem(storageKey) || '[]');
 const cardStorageKey = 'meu-controle-active-cards';
+const billStatusStorageKey = 'meu-controle-closed-bills';
 const defaultCards = ['Itaú', 'CAIXA'];
 const cardKey = name => name.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLocaleLowerCase('pt-BR');
 function readCards() {
@@ -26,6 +27,14 @@ function readCards() {
 }
 let entries = readEntries();
 let activeCards = readCards();
+function readClosedBills() {
+  try {
+    const value = JSON.parse(localStorage.getItem(billStatusStorageKey) || '{}');
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+let closedBills = readClosedBills();
+const billStatusKey = (bank, month) => bank + '|' + month;
 let readingPdf = false;
 let queue = [];
 const selectedPdf = new Set();
@@ -112,9 +121,10 @@ $('card-form').onsubmit = event => {
 };
 
 window.addEventListener('storage', event => {
-  if (event.key !== cardStorageKey && event.key !== storageKey) return;
+  if (event.key !== cardStorageKey && event.key !== storageKey && event.key !== billStatusStorageKey) return;
   activeCards = readCards();
   entries = readEntries();
+  closedBills = readClosedBills();
   renderCardSettings();
   render();
 });
@@ -238,6 +248,15 @@ function renderBills(month) {
     value.textContent = brl(charges.reduce((total, charge) => total + charge.cents, 0));
     const count = document.createElement('small');
     count.textContent = charges.length === 1 ? '1 lançamento no mês' : charges.length + ' lançamentos no mês';
+    const closed = Boolean(closedBills[billStatusKey(bank, month)]?.closed);
+    const state = document.createElement('p');
+    state.className = 'bill-state' + (closed ? ' is-closed' : '');
+    state.textContent = closed ? 'Fatura fechada' : 'Fatura em aberto';
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.textContent = closed ? 'Reabrir fatura' : 'Marcar como fechada';
+    toggle.setAttribute('aria-label', (closed ? 'Reabrir' : 'Fechar') + ' fatura ' + bank + ' de ' + month);
+    toggle.onclick = () => setBillClosed(bank, month, !closed);
     const action = document.createElement('button');
     action.type = 'button';
     action.textContent = 'Ver lançamentos';
@@ -246,9 +265,23 @@ function renderBills(month) {
       $('category-filter').value = '';
       openEntries('filter', bank);
     };
-    card.append(heading, value, count, action);
+    card.append(heading, value, count, state, toggle, action);
     bills.append(card);
   }
+}
+
+function setBillClosed(bank, month, closed) {
+  const key = billStatusKey(bank, month);
+  const now = Date.now();
+  const next = {...closedBills, [key]: {bank, month, closed, updatedAt:now}};
+  try {localStorage.setItem(billStatusStorageKey, JSON.stringify(next));}
+  catch {
+    $('bill-status').textContent = 'Não foi possível salvar o fechamento neste aparelho.';
+    return;
+  }
+  closedBills = next;
+  $('bill-status').textContent = closed ? 'Fatura marcada como fechada.' : 'Fatura reaberta.';
+  renderBills(month);
 }
 
 function resetEntryPage() {
@@ -701,15 +734,19 @@ $('sync-form').onsubmit = async event => {
   $('sync-button').disabled = true;
   status.textContent = 'Sincronizando…';
   try {
-    const synced = await syncEntries(syncToken, readEntries);
+    const synced = await syncEntries(syncToken, readEntries, readClosedBills);
     const current = readEntries();
-    const next = mergeEntries(synced, current);
+    const next = mergeEntries(synced.entries, current);
+    const nextClosedBills = mergeClosedBills(synced.closedBills, readClosedBills());
     localStorage.setItem(storageKey, JSON.stringify(next));
+    localStorage.setItem(billStatusStorageKey, JSON.stringify(nextClosedBills));
     entries = next;
+    closedBills = nextClosedBills;
     render();
-    status.textContent = next.length === synced.length &&
-      next.every((entry, index) => entry === synced[index])
-      ? 'Lançamentos sincronizados.'
+    status.textContent = next.length === synced.entries.length &&
+      next.every((entry, index) => entry === synced.entries[index]) &&
+      JSON.stringify(nextClosedBills) === JSON.stringify(synced.closedBills)
+      ? 'Lançamentos e fechamentos sincronizados.'
       : 'Há alterações locais mais recentes. Sincronize novamente para enviá-las.';
   } catch (error) {
     status.textContent = error instanceof TypeError

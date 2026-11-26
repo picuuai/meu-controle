@@ -8,6 +8,8 @@ Sirva a pasta dist por HTTPS ou por localhost. No Android, abra pelo Chrome e us
 
 Para importar uma fatura, selecione o mês de cobrança e o banco. Arraste o PDF até a área destacada ou use **Escolher PDF**. A leitura usa o texto do arquivo quando disponível e OCR em páginas digitalizadas. Todo o processamento roda no dispositivo. Revise as datas, os valores e o parcelamento antes de salvar.
 
+Na tela **Faturas**, cada cartão mostra o total do mês selecionado e tem seu próprio botão para marcar ou reabrir a fatura. O fechamento fica associado ao cartão e ao mês. Em **Sincronização com GitHub**, os estados de fechamento viajam junto com os lançamentos.
+
 ## Android
 
 Abra a pasta android no Android Studio com JDK 17, Gradle 8.9 e SDK 35. Use Run com um Android conectado ou gere o APK de depuração com gradle :app:assembleDebug. A versão Android inclui a mesma interface no aplicativo. No painel, toque em **Ativar notificações do Android**, autorize o Meu Controle na tela do sistema e volte ao painel. Alertas de compras dos pacotes configurados em CardAlerts aparecem para revisão. Ajuste o mês de cobrança ao revisar se a compra caiu na fatura seguinte.

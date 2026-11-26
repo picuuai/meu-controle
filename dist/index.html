@@ -58,6 +58,7 @@
 
   <section data-view="faturas" aria-labelledby="bills-title" hidden>
     <div class="view-header"><h1 id="bills-title">Faturas</h1></div>
+    <p id="bill-status" role="status"></p>
     <div id="bill-cards" class="bill-cards"></div>
     <section class="panel import-panel"><h2>Importar fatura</h2>
       <label>Cartão de origem <select id="bank"></select></label>
@@ -116,7 +117,7 @@
         <button id="get-update" type="button" hidden>Baixar atualização</button><p id="update-status" role="status"></p></div>
     </section>
     <section class="panel settings-sync"><details><summary>Sincronização com GitHub</summary>
-      <form id="sync-form" autocomplete="off"><p>O token fica disponível enquanto esta página estiver aberta.</p>
+      <form id="sync-form" autocomplete="off"><p>Sincroniza lançamentos e fechamento individual por cartão e mês. O token fica disponível enquanto esta página estiver aberta.</p>
         <label>Token do GitHub<input id="sync-token" type="password" autocomplete="off" spellcheck="false"></label>
         <button id="sync-button" type="submit">Sincronizar agora</button><p id="sync-status" role="status"></p>
       </form>
@@ -146,4 +147,4 @@
 <div class="actions"><button id="pair-pin-close" type="button">Cancelar</button><button type="submit">Parear e sincronizar</button></div>
 </form></dialog>
 <script src="./qrcode.js" defer></script>
-<script type="module" src="./app.mjs?v=27"></script></body></html>
+<script type="module" src="./app.mjs?v=28"></script></body></html>

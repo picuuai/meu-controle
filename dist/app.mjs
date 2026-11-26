@@ -280,7 +280,14 @@ function setBillClosed(bank, month, closed) {
     return;
   }
   closedBills = next;
-  $('bill-status').textContent = closed ? 'Fatura marcada como fechada.' : 'Fatura reaberta.';
+  if (closed) {
+    const nextMonth = monthAfter(month);
+    $('month').value = nextMonth;
+    $('bill-status').textContent = 'Fatura ' + bank + ' fechada. Exibindo ' + nextMonth.split('-').reverse().join('/') + '.';
+    render();
+    return;
+  }
+  $('bill-status').textContent = 'Fatura reaberta.';
   renderBills(month);
 }
 

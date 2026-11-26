@@ -1,6 +1,6 @@
 import {parseNotice, parseStatement, forMonth, futureTotal, candidates, statementTextRows,
   identifyStatementRows, importStatementRows, installmentCount, applyStatementForecast, statementDueDate,
-  statementReferenceMonth, monthAfter} from './ledger.mjs?v=22';
+  statementReferenceMonth, monthAfter} from './ledger.mjs?v=23';
 import {mergeEntries, mergeClosedBills, syncEntries} from './sync.mjs?v=14';
 import {categories, categoryOf, groupCharges, monthlyCharges, suggestCategory, uncategorized} from './dashboard.mjs?v=21';
 import {parseSmsText, parseSmsBackup, smsKey} from './sms.mjs?v=24';

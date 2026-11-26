@@ -349,7 +349,8 @@ function review(refreshPdf = true) {
     const button = document.createElement('button');
     button.className = 'entry';
     button.textContent = item.name + ' · ' + (item.cents == null ? 'Valor pendente' : brl(item.cents)) +
-      (item.date ? ' · ' + item.date.split('-').reverse().join('/') : '') + ' · ' + paymentLabel(item);
+      (item.date ? ' · ' + item.date.split('-').reverse().join('/') : '') + ' · ' + paymentLabel(item) +
+      (item.confirmationPending ? ' · Confirmar compra' : '');
     button.onclick = () => edit(item);
     $('review').append(button);
   }
@@ -751,7 +752,8 @@ function queueSms(rows) {
     const key = smsKey(row);
     if (seen.has(key)) continue;
     seen.add(key);
-    queue.push({...row, month:row.date.slice(0, 7), category:suggestCategory(row.name, prior), source:'alert'});
+    queue.push({...row, count:row.count || 1, part:row.part || 1, month:row.date.slice(0, 7),
+      category:suggestCategory(row.name, prior), confirmationPending:true, source:'alert'});
     added++;
   }
   const skipped = rows.length - added;

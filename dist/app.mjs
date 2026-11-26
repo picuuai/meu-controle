@@ -841,23 +841,30 @@ const dropZone = $('pdf-drop');
 const pickPdf = $('pick-pdf');
 pickPdf.onclick = () => pdfInput.click();
 pdfInput.onchange = () => importPdf(pdfInput.files);
-dropZone.ondragover = event => {
-  if (!event.dataTransfer.types.includes('Files')) return;
+const hasFiles = event => Array.from(event.dataTransfer?.types || []).includes('Files');
+document.addEventListener('dragenter', event => {
+  if (!hasFiles(event)) return;
   event.preventDefault();
-  event.dataTransfer.dropEffect = pickPdf.disabled ? 'none' : 'copy';
+  dropZone.classList.add('dragging');
+});
+document.addEventListener('dragover', event => {
+  if (!hasFiles(event)) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = pickPdf.disabled ? 'none' : 'copy';
   dropZone.classList.toggle('dragging', !pickPdf.disabled);
-};
-dropZone.ondragleave = event => {
-  if (!dropZone.contains(event.relatedTarget)) dropZone.classList.remove('dragging');
-};
-dropZone.ondrop = event => {
+});
+document.addEventListener('dragleave', event => {
+  if (hasFiles(event) && !event.relatedTarget) dropZone.classList.remove('dragging');
+});
+document.addEventListener('drop', event => {
+  if (!hasFiles(event)) return;
   event.preventDefault();
   dropZone.classList.remove('dragging');
   importPdf(event.dataTransfer.files);
-};
+});
 
 async function importPdf(files) {
-  if (!files.length || pickPdf.disabled) return;
+  if (!files?.length || pickPdf.disabled) return;
   const status = $('status');
   $('pdf-bank-forecast').hidden = true;
   const [file] = files;

@@ -63,8 +63,8 @@
     <section class="panel import-panel"><h2>Importar fatura</h2>
       <label>Cartão de origem <select id="bank"></select></label>
       <p id="no-active-cards" hidden>Cadastre um cartão para importar uma fatura. <a href="#configuracoes">Gerenciar cartões</a></p>
-      <div class="pdf-drop" id="pdf-drop">
-        <p>Arraste o PDF da fatura para cá</p>
+      <div class="pdf-drop" id="pdf-drop" aria-label="Área para importar uma fatura PDF">
+        <p>Solte um PDF da fatura aqui ou em qualquer área do app</p>
         <button id="pick-pdf" type="button">Escolher PDF</button>
         <input id="pdf" type="file" accept="application/pdf,.pdf" hidden>
       </div>
@@ -147,4 +147,4 @@
 <div class="actions"><button id="pair-pin-close" type="button">Cancelar</button><button type="submit">Parear e sincronizar</button></div>
 </form></dialog>
 <script src="./qrcode.js" defer></script>
-<script type="module" src="./app.mjs?v=28"></script></body></html>
+<script type="module" src="./app.mjs?v=29"></script></body></html>

@@ -256,11 +256,20 @@ export function applyStatementForecast(rows, month, controls) {
 const normalized = value => value.replace(installmentMarker, '').replace(incompleteInstallment, '').normalize('NFD')
   .replace(/\p{Diacritic}/gu,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 
+function sameMerchant(left, right) {
+  const a = normalized(left);
+  const b = normalized(right);
+  if (a === b) return true;
+  // Some CAIXA statements abbreviate merchant names that were saved from an alert
+  // or an earlier statement (for example, "JOSE ENIO CARNE" / "JOSE ENIO CARNEIRO ME").
+  return Math.min(a.length, b.length) >= 12 && (a.startsWith(b) || b.startsWith(a));
+}
+
 export function candidates(entries, incoming) {
   const name = normalized(incoming.name);
   if (!name || name === 'compradocartao') return [];
   return entries.filter(entry => {
-    if (entry.deleted || entry.bank !== incoming.bank || entry.date !== incoming.date || normalized(entry.name) !== name) return false;
+    if (entry.deleted || entry.bank !== incoming.bank || entry.date !== incoming.date || !sameMerchant(entry.name, incoming.name)) return false;
     const existing = forMonth(entry, incoming.month);
     const alertWasAssumedCash = incoming.count > 1 && entry.source === 'alert' && entry.count === 1 &&
       entry.month <= incoming.month &&
@@ -318,6 +327,17 @@ export function importStatementRows(entries, rows, createId, now, selected) {
     }
     const existing = matches[0];
     if (existing) used.add(existing.id);
+    const bill = existing && forMonth(existing, row.month);
+    const sameInstallment = Boolean(existing && row.count && existing.count === row.count &&
+      bill?.part === row.part && bill.cents === row.cents);
+    // Once the user saves an invoice, an exact statement match confirms a forecast
+    // automatically, even though that already-known installment was hidden in review.
+    if (!preview && existing?.projection && sameInstallment) {
+      saved.set(existing.id, {...existing, projection:false, statementKey:row.statementKey,
+        updatedAt:Math.max(now, (existing.updatedAt || 0) + 1)});
+      updated++;
+      continue;
+    }
     if (!selected.has(row)) continue;
     if (!existing) {
       const id = createId();
@@ -325,7 +345,6 @@ export function importStatementRows(entries, rows, createId, now, selected) {
       added++;
       continue;
     }
-    const bill = forMonth(existing, row.month);
     if (row.billOnly && !existing.billOnly && existing.statementValue && existing.month === row.month &&
         bill?.part === row.part && bill.cents === row.cents) {
       saved.set(existing.id, {...existing, billOnly:true, updatedAt:Math.max(now, (existing.updatedAt || 0) + 1)});

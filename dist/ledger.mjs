@@ -260,10 +260,21 @@ function sameMerchant(left, right) {
   const a = normalized(left);
   const b = normalized(right);
   if (a === b) return true;
-  // Some CAIXA statements abbreviate merchant names that were saved from an alert
-  // or an earlier statement (for example, "JOSE ENIO CARNE" / "JOSE ENIO CARNEIRO ME").
-  return Math.min(a.length, b.length) >= 12 && (a.startsWith(b) || b.startsWith(a));
+  // Statements and alerts often abbreviate or rearrange the merchant name.
+  if (Math.min(a.length, b.length) >= 10 && (a.includes(b) || b.includes(a))) return true;
+  const generic = new Set(['supermercado','mercado','farmacia','drogaria','restaurante','posto','pagamento',
+    'compra','calcados','comercio','servicos','conveniencia','industria','online','estacionamento']);
+  const words = value => value.replace(installmentMarker, '').replace(incompleteInstallment, '')
+    .normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().match(/[a-z0-9]{5,}/g) || [];
+  const tokensA = words(left).filter(token => token.length >= 6 && !generic.has(token));
+  const tokensB = words(right).filter(token => token.length >= 6 && !generic.has(token));
+  if (tokensA.some(token => tokensB.includes(token))) return true;
+  let prefix = 0;
+  while (prefix < Math.min(a.length, b.length) && a[prefix] === b[prefix]) prefix++;
+  return prefix >= 10;
 }
+
+const centsMatch = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 1;
 
 export function candidates(entries, incoming) {
   const name = normalized(incoming.name);
@@ -275,7 +286,9 @@ export function candidates(entries, incoming) {
       entry.month <= incoming.month &&
       (entry.cents === incoming.cents ||
         Math.abs(entry.cents - incoming.count * incoming.cents) <= incoming.count);
-    return existing?.cents === incoming.cents || alertWasAssumedCash ||
+    const relatedInstallment = incoming.count && entry.count === incoming.count &&
+      Math.abs(entry.part - incoming.part) <= 1;
+    return centsMatch(existing?.cents, incoming.cents) || relatedInstallment || alertWasAssumedCash ||
       (incoming.count && !entry.count && Math.abs(entry.cents - incoming.count * incoming.cents) <= incoming.count);
   });
 }
@@ -329,7 +342,7 @@ export function importStatementRows(entries, rows, createId, now, selected) {
     if (existing) used.add(existing.id);
     const bill = existing && forMonth(existing, row.month);
     const sameInstallment = Boolean(existing && row.count && existing.count === row.count &&
-      bill?.part === row.part && bill.cents === row.cents);
+      bill?.part === row.part && centsMatch(bill.cents, row.cents));
     if (preview && sameInstallment) {
       alreadyRecorded.add(row);
       continue;
@@ -356,9 +369,9 @@ export function importStatementRows(entries, rows, createId, now, selected) {
       updated++;
       continue;
     }
-    if ((row.count === 1 && bill?.cents === row.cents) ||
+    if ((row.count === 1 && centsMatch(bill?.cents, row.cents)) ||
         (existing.statementValue && !row.count) ||
-        (row.count && existing.count === row.count && bill?.part === row.part && bill.cents === row.cents)) {
+        (row.count && existing.count === row.count && bill?.part === row.part && centsMatch(bill.cents, row.cents))) {
       alreadyRecorded.add(row);
       continue;
     }

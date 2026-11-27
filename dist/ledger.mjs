@@ -330,10 +330,15 @@ export function importStatementRows(entries, rows, createId, now, selected) {
     const bill = existing && forMonth(existing, row.month);
     const sameInstallment = Boolean(existing && row.count && existing.count === row.count &&
       bill?.part === row.part && bill.cents === row.cents);
-    // Once the user saves an invoice, an exact statement match confirms a forecast
-    // automatically, even though that already-known installment was hidden in review.
-    if (!preview && existing?.projection && sameInstallment) {
-      saved.set(existing.id, {...existing, projection:false, statementKey:row.statementKey,
+    if (preview && sameInstallment) {
+      alreadyRecorded.add(row);
+      continue;
+    }
+    // Exact matches are hidden during review. When the user saves the invoice,
+    // reconcile any forecast or bill-only metadata without asking them to re-add it.
+    if (!preview && sameInstallment && (existing.projection || (row.billOnly && !existing.billOnly))) {
+      saved.set(existing.id, {...existing, ...(existing.projection && {projection:false}),
+        ...(row.billOnly && {billOnly:true}), statementKey:row.statementKey,
         updatedAt:Math.max(now, (existing.updatedAt || 0) + 1)});
       updated++;
       continue;
